@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 777 nodes · 1337 edges · 40 communities (35 shown, 5 thin omitted)
+- 789 nodes · 1348 edges · 43 communities (37 shown, 6 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 9 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2ffc99bd`
+- Built from commit: `b1567b54`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -50,7 +50,10 @@
 - [[_COMMUNITY_DB Migration Journal|DB Migration Journal]]
 - [[_COMMUNITY_Hover Card|Hover Card]]
 - [[_COMMUNITY_Resizable Panels|Resizable Panels]]
+- [[_COMMUNITY_Community 37|Community 37]]
 - [[_COMMUNITY_Vitest Config|Vitest Config]]
+- [[_COMMUNITY_Community 41|Community 41]]
+- [[_COMMUNITY_Community 43|Community 43]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `cn()` - 283 edges
@@ -84,7 +87,7 @@
 - **Portability Rework: Auth + LLM + DB + Cron** — claude_jwt_auth, claude_llm_env_config, claude_postgresql_migration, claude_node_cron_scheduler, claude_portability_decision [EXTRACTED 1.00]
 - **Observability Stack: Pino + Request IDs + Error Codes** — claude_pino_logger, claude_error_handling, claude_zod_validation [EXTRACTED 0.95]
 
-## Communities (40 total, 5 thin omitted)
+## Communities (43 total, 6 thin omitted)
 
 ### Community 0 - "Server Core and Auth"
 Cohesion: 0.05
@@ -107,20 +110,20 @@ Cohesion: 0.06
 Nodes (36): MapView(), MapViewProps, Window, TimerResponse, useComposition(), UseCompositionOptions, UseCompositionReturn, noop (+28 more)
 
 ### Community 5 - "Sheet and Mobile UI"
-Cohesion: 0.07
-Nodes (33): useIsMobile(), Sidebar(), SidebarContent(), SidebarContext, SidebarContextProps, SidebarFooter(), SidebarGroup(), SidebarGroupAction() (+25 more)
+Cohesion: 0.06
+Nodes (40): useIsMobile(), Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetTitle() (+32 more)
 
 ### Community 6 - "Build Config"
-Cohesion: 0.05
-Nodes (41): devDependencies, autoprefixer, drizzle-kit, esbuild, pino-pretty, pnpm, postcss, prettier (+33 more)
+Cohesion: 0.09
+Nodes (23): devDependencies, autoprefixer, drizzle-kit, esbuild, pino-pretty, pnpm, postcss, prettier (+15 more)
 
 ### Community 7 - "Accordion and Utils"
-Cohesion: 0.08
-Nodes (33): cn(), Avatar(), AvatarFallback(), AvatarImage(), BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList() (+25 more)
+Cohesion: 0.09
+Nodes (33): cn(), Avatar(), AvatarFallback(), AvatarImage(), Field(), FieldContent(), FieldDescription(), FieldError() (+25 more)
 
 ### Community 8 - "Alert Dialog and Pages"
-Cohesion: 0.07
-Nodes (26): AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay(), AlertDialogTitle() (+18 more)
+Cohesion: 0.14
+Nodes (13): Architecture, Commands, Database, Dev server, Environment, Install, LLM options, Prerequisites (+5 more)
 
 ### Community 9 - "Multi-Agent Design Docs"
 Cohesion: 0.10
@@ -131,12 +134,12 @@ Cohesion: 0.10
 Nodes (19): compilerOptions, allowImportingTsExtensions, baseUrl, esModuleInterop, incremental, jsx, lib, module (+11 more)
 
 ### Community 11 - "Button Group and Field"
-Cohesion: 0.13
-Nodes (16): ButtonGroup(), ButtonGroupSeparator(), ButtonGroupText(), buttonGroupVariants, Field(), FieldContent(), FieldDescription(), FieldError() (+8 more)
+Cohesion: 0.22
+Nodes (9): NavigationMenu(), NavigationMenuContent(), NavigationMenuIndicator(), NavigationMenuItem(), NavigationMenuLink(), NavigationMenuList(), NavigationMenuTrigger(), navigationMenuTriggerStyle (+1 more)
 
 ### Community 12 - "Menubar"
-Cohesion: 0.18
-Nodes (7): Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetTitle()
+Cohesion: 0.12
+Nodes (11): Menubar(), MenubarCheckboxItem(), MenubarContent(), MenubarItem(), MenubarLabel(), MenubarRadioItem(), MenubarSeparator(), MenubarShortcut() (+3 more)
 
 ### Community 13 - "Component Aliases"
 Cohesion: 0.12
@@ -151,24 +154,24 @@ Cohesion: 0.12
 Nodes (9): DropdownMenuCheckboxItem(), DropdownMenuContent(), DropdownMenuItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuSeparator(), DropdownMenuShortcut(), DropdownMenuSubContent() (+1 more)
 
 ### Community 16 - "Template Config"
-Cohesion: 0.40
-Nodes (3): InputOTP(), InputOTPGroup(), InputOTPSlot()
+Cohesion: 0.25
+Nodes (6): BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage(), BreadcrumbSeparator()
 
 ### Community 17 - "Carousel"
-Cohesion: 0.19
-Nodes (13): Carousel(), CarouselApi, CarouselContent(), CarouselContext, CarouselContextProps, CarouselItem(), CarouselNext(), CarouselOptions (+5 more)
+Cohesion: 0.05
+Nodes (39): AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay(), AlertDialogTitle() (+31 more)
 
 ### Community 18 - "Form Components"
 Cohesion: 0.20
 Nodes (11): FormControl(), FormDescription(), FormFieldContext, FormFieldContextValue, FormItem(), FormItemContext, FormItemContextValue, FormLabel() (+3 more)
 
 ### Community 19 - "Item Components"
-Cohesion: 0.18
-Nodes (12): Item(), ItemActions(), ItemContent(), ItemDescription(), ItemFooter(), ItemGroup(), ItemHeader(), ItemMedia() (+4 more)
+Cohesion: 0.13
+Nodes (17): ButtonGroup(), ButtonGroupSeparator(), ButtonGroupText(), buttonGroupVariants, Item(), ItemActions(), ItemContent(), ItemDescription() (+9 more)
 
 ### Community 20 - "Utilities and Primitives"
-Cohesion: 0.10
-Nodes (12): AccordionContent(), AccordionItem(), AccordionTrigger(), Badge(), badgeVariants, Checkbox(), Progress(), RadioGroup() (+4 more)
+Cohesion: 0.18
+Nodes (5): Checkbox(), Progress(), Slider(), Spinner(), Switch()
 
 ### Community 21 - "Chart Components"
 Cohesion: 0.22
@@ -184,11 +187,11 @@ Nodes (7): SelectContent(), SelectItem(), SelectLabel(), SelectScrollDownButton(
 
 ### Community 24 - "Navigation Menu"
 Cohesion: 0.22
-Nodes (9): NavigationMenu(), NavigationMenuContent(), NavigationMenuIndicator(), NavigationMenuItem(), NavigationMenuLink(), NavigationMenuList(), NavigationMenuTrigger(), navigationMenuTriggerStyle (+1 more)
+Nodes (8): license, name, tailwindcss>nanoid, packageManager, pnpm, overrides, type, version
 
 ### Community 26 - "Breadcrumb"
 Cohesion: 0.40
-Nodes (4): Tabs(), TabsContent(), TabsList(), TabsTrigger()
+Nodes (3): InputOTP(), InputOTPGroup(), InputOTPSlot()
 
 ### Community 27 - "Empty States"
 Cohesion: 0.29
@@ -210,22 +213,30 @@ Nodes (4): Alert(), AlertDescription(), AlertTitle(), alertVariants
 Cohesion: 0.50
 Nodes (3): dialect, entries, version
 
+### Community 41 - "Community 41"
+Cohesion: 0.25
+Nodes (8): scripts, build, check, db:push, dev, format, start, test
+
+### Community 43 - "Community 43"
+Cohesion: 0.40
+Nodes (3): AccordionContent(), AccordionItem(), AccordionTrigger()
+
 ## Knowledge Gaps
-- **232 isolated node(s):** `Props`, `State`, `Window`, `MapViewProps`, `NAV_ITEMS` (+227 more)
+- **242 isolated node(s):** `Stack`, `Architecture`, `Prerequisites`, `Install`, `Environment` (+237 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **5 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `Accordion and Utils` to `Layout and Theme`, `Map and UI Hooks`, `Sheet and Mobile UI`, `Alert Dialog and Pages`, `Button Group and Field`, `Menubar`, `Context Menu`, `Dropdown Menu`, `Template Config`, `Carousel`, `Form Components`, `Item Components`, `Utilities and Primitives`, `Chart Components`, `Drawer`, `Select`, `Navigation Menu`, `Breadcrumb`, `Empty States`, `Error Boundary`, `Toggle Group`, `Alert`, `Popover`, `Hover Card`, `Resizable Panels`?**
-  _High betweenness centrality (0.417) - this node is a cross-community bridge._
+- **Why does `cn()` connect `Accordion and Utils` to `Layout and Theme`, `Map and UI Hooks`, `Sheet and Mobile UI`, `Button Group and Field`, `Menubar`, `Context Menu`, `Dropdown Menu`, `Template Config`, `Carousel`, `Form Components`, `Item Components`, `Utilities and Primitives`, `Chart Components`, `Drawer`, `Select`, `Breadcrumb`, `Empty States`, `Error Boundary`, `Toggle Group`, `Alert`, `Popover`, `Hover Card`, `Resizable Panels`, `Community 37`, `Community 43`?**
+  _High betweenness centrality (0.405) - this node is a cross-community bridge._
 - **Why does `AppRouter` connect `Server Core and Auth` to `Layout and Theme`?**
-  _High betweenness centrality (0.043) - this node is a cross-community bridge._
+  _High betweenness centrality (0.042) - this node is a cross-community bridge._
 - **Why does `ENV` connect `Server Core and Auth` to `LLM Integration`?**
-  _High betweenness centrality (0.018) - this node is a cross-community bridge._
-- **What connects `Props`, `State`, `Window` to the rest of the system?**
-  _232 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+- **What connects `Stack`, `Architecture`, `Prerequisites` to the rest of the system?**
+  _242 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Server Core and Auth` be split into smaller, more focused modules?**
   _Cohesion score 0.05228105228105228 - nodes in this community are weakly interconnected._
 - **Should `Layout and Theme` be split into smaller, more focused modules?**

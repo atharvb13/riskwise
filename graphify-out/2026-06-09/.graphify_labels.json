@@ -1,0 +1,21 @@
+{
+  "0": "Server Core and Auth",
+  "1": "Layout and Theme",
+  "2": "Package Dependencies",
+  "3": "LLM Integration",
+  "4": "Map and UI Hooks",
+  "5": "Sheet and Mobile UI",
+  "6": "Build Config",
+  "7": "Accordion and Utils",
+  "8": "Alert Dialog and Pages",
+  "9": "Multi-Agent Design Docs",
+  "10": "TypeScript Config",
+  "13": "Component Aliases",
+  "16": "Template Config",
+  "25": "Error Types",
+  "28": "Error Boundary",
+  "32": "DB Migration Journal",
+  "36": "Route Map Context",
+  "39": "Vitest Config",
+  "40": "Drizzle Config"
+}

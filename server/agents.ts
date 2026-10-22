@@ -8,9 +8,10 @@
  */
 
 import { invokeLLM, type LLMConfig } from "./_core/llm";
+import { athenaResultSchema, hermesResultSchema, apolloResultSchema, athenaScanSchema, parseAgentResult } from "./agentResults";
 import { ENV } from "./_core/env";
 import { createLogger, logAgentTelemetry, logAthenaScan, logRouteEvaluation } from "./_core/logger";
-import { fetchAllRealTimeIntelligence, type LiveRiskEvent } from "./realtime";
+import { fetchAllRealTimeIntelligence, type LiveRiskEvent, type DataFetchSummary } from "./realtime";
 
 // ── Per-agent LLM configs (fall back to global if not set) ───────────────────
 
@@ -99,13 +100,14 @@ export interface OrchestrationResult {
 export async function runAthena(
   origin: string,
   destination: string,
-  activeDisruptions: { title: string; category: string; severity: string; affectedLocations: string[]; description: string }[]
+  activeDisruptions: { title: string; category: string; severity: string; affectedLocations: string[]; description: string }[],
+  intelligence?: DataFetchSummary
 ): Promise<AthenaResult> {
   // Fetch real-time intelligence from live sources (RSS, NASA EONET, USGS, Country Risk)
   let liveEvents: LiveRiskEvent[] = [];
   let liveSourceSummary = "";
   try {
-    const liveData = await fetchAllRealTimeIntelligence();
+    const liveData = intelligence ?? await fetchAllRealTimeIntelligence();
     liveEvents = liveData.events;
     const successfulSources = liveData.sources.filter((s) => s.ok).map((s) => `${s.name} (${s.count} events)`);
     liveSourceSummary = successfulSources.length > 0
@@ -200,6 +202,8 @@ Respond with JSON in this exact format:
     },
   }, athenaConfig);
 
+  const parsed = parseAgentResult(athenaResultSchema, response, "Athena");
+
   logAgentTelemetry({
     agent: "athena",
     model: response._model,
@@ -211,8 +215,7 @@ Respond with JSON in this exact format:
     route: { origin, destination },
   });
 
-  const content = String(response.choices[0]?.message?.content ?? "{}");
-  return JSON.parse(content) as AthenaResult;
+  return parsed;
 }
 
 // ── Agent Hermes – The Risk Modeler ──────────────────────────────────────────
@@ -300,6 +303,8 @@ Respond with JSON in this exact format:
     },
   }, hermesConfig);
 
+  const parsed = parseAgentResult(hermesResultSchema, response, "Hermes");
+
   logAgentTelemetry({
     agent: "hermes",
     model: response._model,
@@ -311,8 +316,7 @@ Respond with JSON in this exact format:
     route: { origin, destination },
   });
 
-  const content = String(response.choices[0]?.message?.content ?? "{}");
-  return JSON.parse(content) as HermesResult;
+  return parsed;
 }
 
 // ── Agent Apollo – The Route Optimizer ───────────────────────────────────────
@@ -397,6 +401,8 @@ Respond with JSON in this exact format:
     },
   }, apolloConfig);
 
+  const parsed = parseAgentResult(apolloResultSchema, response, "Apollo");
+
   logAgentTelemetry({
     agent: "apollo",
     model: response._model,
@@ -408,8 +414,7 @@ Respond with JSON in this exact format:
     route: { origin, destination },
   });
 
-  const content = String(response.choices[0]?.message?.content ?? "{}");
-  return JSON.parse(content) as ApolloResult;
+  return parsed;
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -423,13 +428,14 @@ export async function orchestrate(
   orchestratorLog.info({ route: { origin, destination } }, `Starting orchestration: ${origin} -> ${destination}`);
 
   // Step 1: Athena researches relevant disruptions (with live data)
-  let liveDataSources: { name: string; count: number; ok: boolean }[] = [];
+  let intelligence: DataFetchSummary = { events: [], sources: [], fetchedAt: new Date().toISOString() };
   try {
-    const { fetchAllRealTimeIntelligence } = await import("./realtime");
-    const liveData = await fetchAllRealTimeIntelligence();
-    liveDataSources = liveData.sources;
-  } catch {}
-  const athenaResult = await runAthena(origin, destination, activeDisruptions);
+    intelligence = await fetchAllRealTimeIntelligence();
+  } catch (error) {
+    orchestratorLog.warn({ err: error }, "Live intelligence unavailable; using database events");
+  }
+  const liveDataSources = intelligence.sources;
+  const athenaResult = await runAthena(origin, destination, activeDisruptions, intelligence);
 
   // Step 2: Hermes calculates risk score
   const hermesResult = await runHermes(origin, destination, athenaResult);
@@ -574,6 +580,8 @@ Respond with JSON in this exact format:
     },
   }, athenaConfig);
 
+  const parsed = parseAgentResult(athenaScanSchema, response, "Athena");
+
   logAgentTelemetry({
     agent: "athena-scan",
     model: response._model,
@@ -583,8 +591,6 @@ Respond with JSON in this exact format:
     totalTokens: response.usage?.total_tokens,
     success: true,
   });
-
-  const parsed = JSON.parse(String(response.choices[0]?.message?.content ?? "{}"));
 
   logAthenaScan({
     source: "llm-fallback",

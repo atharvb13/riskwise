@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { TRPCError } from "@trpc/server";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -19,7 +20,12 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
+    mime_type?:
+      | "audio/mpeg"
+      | "audio/wav"
+      | "application/pdf"
+      | "audio/mp4"
+      | "video/mp4";
   };
 };
 
@@ -279,7 +285,10 @@ export type InvokeResponse = InvokeResult & {
   _model: string;
 };
 
-export async function invokeLLM(params: InvokeParams, config?: LLMConfig): Promise<InvokeResponse> {
+export async function invokeLLM(
+  params: InvokeParams,
+  config?: LLMConfig
+): Promise<InvokeResponse> {
   const apiKey = resolveApiKey(config);
   const model = resolveModel(config);
 
@@ -322,25 +331,61 @@ export async function invokeLLM(params: InvokeParams, config?: LLMConfig): Promi
     payload.response_format = normalizedResponseFormat;
   }
 
+  const maxTokens = params.max_tokens ?? params.maxTokens;
+  if (maxTokens !== undefined) payload.max_tokens = maxTokens;
+
   const start = Date.now();
-  const response = await fetch(resolveApiUrl(config), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const signal = AbortSignal.timeout(ENV.RISKWISE_LLM_TIMEOUT_MS);
+  try {
+    const response = await fetch(resolveApiUrl(config), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
 
-  const latencyMs = Date.now() - start;
+    if (!response.ok) {
+      // Provider errors can contain credentials or request data. Never relay them.
+      await response.body?.cancel().catch(() => {});
+      throw new TRPCError({
+        code: "BAD_GATEWAY",
+        message:
+          response.status === 404
+            ? "The configured AI model is unavailable. Please check the model configuration."
+            : response.status === 429
+              ? "The AI service is busy. Please wait a moment and try again."
+              : "The AI service could not complete this evaluation. Please try again.",
+      });
+    }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} - ${errorText}`
-    );
+    let result: InvokeResult;
+    try {
+      result = (await response.json()) as InvokeResult;
+      if (!Array.isArray(result?.choices) || !result.choices[0]?.message)
+        throw new Error("Missing completion");
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new TRPCError({
+        code: "BAD_GATEWAY",
+        message:
+          "The AI service returned an invalid response. Please try again.",
+      });
+    }
+    return { ...result, _latencyMs: Date.now() - start, _model: model };
+  } catch (error) {
+    if (error instanceof TRPCError) throw error;
+    const timedOut =
+      signal.aborted ||
+      (error instanceof Error &&
+        ["TimeoutError", "AbortError"].includes(error.name));
+    throw new TRPCError({
+      code: timedOut ? "TIMEOUT" : "BAD_GATEWAY",
+      message: timedOut
+        ? "The AI service took too long to respond. Please retry the evaluation."
+        : "The AI service is unavailable. Please check the model service and try again.",
+    });
   }
-
-  const result = (await response.json()) as InvokeResult;
-  return { ...result, _latencyMs: latencyMs, _model: model };
 }

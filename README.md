@@ -2,6 +2,8 @@
 
 Maritime supply chain intelligence platform. Evaluate shipping routes for geopolitical, weather, labor, and congestion risk using a multi-agent AI pipeline. Get risk scores, narratives, alternative routes, and a live disruption feed.
 
+See the [10-day improvement plan](docs/IMPROVEMENT_PLAN.md) for the current priorities and acceptance checks. Deployment is deferred.
+
 ---
 
 ## Stack
@@ -57,6 +59,8 @@ JWT_SECRET=your-secret-minimum-32-characters-long
 RISKWISE_LLM_BASE_URL=http://localhost:11434/v1
 RISKWISE_LLM_API_KEY=ollama
 RISKWISE_LLM_MODEL=mistral
+# Per model call, including response-body reading (1,000–600,000 ms)
+RISKWISE_LLM_TIMEOUT_MS=180000
 
 # Optional
 GOOGLE_MAPS_API_KEY=

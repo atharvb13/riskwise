@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { parseRouteQuery, resolveRouteInput } from "@shared/routeInput";
 import {
   getRiskTextClass,
   getRiskBorderClass,
@@ -65,6 +66,8 @@ export default function RouteAnalyzer() {
   const [agentLog, setAgentLog] = useState<AgentMessage[]>([]);
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
+  const runningRef = useRef(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [, navigate] = useLocation();
@@ -73,6 +76,7 @@ export default function RouteAnalyzer() {
   const [evalledDestination, setEvalledDestination] = useState("");
 
   const evaluateMutation = trpc.routes.evaluate.useMutation();
+  const utils = trpc.useUtils();
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -84,115 +88,60 @@ export default function RouteAnalyzer() {
     setAgentLog((prev) => [...prev, { agent, message, status }]);
   };
 
-  const parseQueryForPorts = (q: string): { origin: string; destination: string } | null => {
-    const fromMatch = q.match(/from\s+([^to]+?)\s+to\s+(.+?)(?:\s+for|\s+next|\s*$)/i);
-    if (fromMatch) {
-      return {
-        origin: fromMatch[1].trim(),
-        destination: fromMatch[2].trim(),
-      };
-    }
-    return null;
-  };
-
   const handleRun = async () => {
-    let evalOrigin = origin.trim();
-    let evalDestination = destination.trim();
-
-    if (!evalOrigin || !evalDestination) {
-      if (query.trim()) {
-        const parsed = parseQueryForPorts(query);
-        if (parsed) {
-          evalOrigin = parsed.origin;
-          evalDestination = parsed.destination;
-        } else {
-          toast.error("Could not parse origin/destination from query. Please fill in the port fields.");
-          return;
-        }
-      } else {
-        toast.error("Please enter origin and destination ports.");
-        return;
-      }
+    if (runningRef.current) return;
+    const resolved = resolveRouteInput({ origin, destination, queryText: query.trim() || undefined });
+    if (!resolved.success) {
+      setEvaluationError(resolved.message);
+      return;
     }
-
+    const { origin: evalOrigin, destination: evalDestination } = resolved.data;
+    runningRef.current = true;
     setIsRunning(true);
+    setEvaluationError(null);
     setResult(null);
-    setAgentLog([]);
+    setOrigin(evalOrigin);
+    setDestination(evalDestination);
     setEvalledOrigin(evalOrigin);
     setEvalledDestination(evalDestination);
-
-    addLog("SYSTEM", `Initializing RiskWise multi-agent evaluation...`, "done");
-    addLog("SYSTEM", `Route: ${evalOrigin} → ${evalDestination}`, "done");
-
-    await new Promise((r) => setTimeout(r, 400));
-    addLog("ATHENA", "Scanning global trade disruption database...", "working");
-    await new Promise((r) => setTimeout(r, 600));
-    addLog("ATHENA", "Cross-referencing RSS feeds and port authority bulletins...", "working");
-    await new Promise((r) => setTimeout(r, 500));
-    addLog("ATHENA", "Extracting geopolitical risk vectors for route corridor...", "working");
-
-    // Start actual API call
-    const evaluationPromise = evaluateMutation.mutateAsync({
-      origin: evalOrigin,
-      destination: evalDestination,
-      queryText: query || `${evalOrigin} to ${evalDestination}`,
-    });
-
-    await new Promise((r) => setTimeout(r, 800));
-    addLog("ATHENA", "Intelligence gathered. Passing data to Hermes...", "done");
-    await new Promise((r) => setTimeout(r, 300));
-    addLog("HERMES", "Received Athena intelligence package.", "working");
-    await new Promise((r) => setTimeout(r, 500));
-    addLog("HERMES", `Calculating risk vectors for ${evalOrigin} → ${evalDestination}...`, "working");
-    await new Promise((r) => setTimeout(r, 600));
-    addLog("HERMES", "Applying weighted risk model: weather, labor, geopolitical, congestion...", "working");
-
+    setAgentLog([
+      { agent: "SYSTEM", message: `Route: ${evalOrigin} → ${evalDestination}`, status: "done" },
+      { agent: "SYSTEM", message: "Evaluation requested. Waiting for intelligence analysis, risk scoring, and any required alternatives…", status: "working" },
+    ]);
     try {
-      const evalResult = await evaluationPromise;
+      const evalResult = await evaluateMutation.mutateAsync(resolved.data);
       const score = evalResult.overallRiskScore;
-
+      setAgentLog(prev => prev.map(log => ({ ...log, status: "done" })));
+      addLog("ATHENA", "Intelligence analysis received.", "done");
       addLog("HERMES", `Risk Score computed: ${score}/100 — ${getRiskLabel(score)}`, "done");
-      await new Promise((r) => setTimeout(r, 300));
-
-      if (score > 50) {
-        addLog("APOLLO", "High risk detected. Initiating route optimization protocol...", "working");
-        await new Promise((r) => setTimeout(r, 400));
-        addLog("APOLLO", "Calculating alternative maritime corridors...", "working");
-        await new Promise((r) => setTimeout(r, 400));
-        addLog("APOLLO", `Generated ${evalResult.alternativeRoutes.length} alternative route(s).`, "done");
-      } else {
-        addLog("APOLLO", "Risk within acceptable parameters. No rerouting required.", "done");
-      }
-
-      await new Promise((r) => setTimeout(r, 200));
-      addLog("SYSTEM", "Evaluation complete. Results ready.", "done");
-
-      setResult(evalResult as EvaluationResult);
-
+      addLog("APOLLO", score > 50
+        ? `Returned ${evalResult.alternativeRoutes.length} alternative route(s).`
+        : "Risk within acceptable parameters. No rerouting requested.", "done");
+      addLog("SYSTEM", "Evaluation complete and saved to route history.", "done");
+      setResult(evalResult);
+      void Promise.allSettled([utils.routes.history.invalidate(), utils.routes.trend.invalidate()]);
       if (score > 75) {
-        toast.error(`🚨 CRITICAL RISK: Score ${score}/100 — Owner notified`, {
-          duration: 6000,
-        });
+        toast.error(`Critical risk: ${score}/100 — Review the analysis and alternatives.`, { duration: 6000 });
       } else if (score > 50) {
-        toast.warning(`⚠ HIGH RISK: Score ${score}/100 — Review alternatives`, {
-          duration: 4000,
-        });
+        toast.warning(`High risk: ${score}/100 — Review alternatives.`, { duration: 4000 });
       } else {
-        toast.success(`✓ Evaluation complete — Risk Score: ${score}/100`, {
-          duration: 3000,
-        });
+        toast.success(`Evaluation complete — Risk Score: ${score}/100`, { duration: 3000 });
       }
     } catch (err) {
-      addLog("SYSTEM", `Error: ${(err as Error).message}`, "error");
-      toast.error("Evaluation failed. Please try again.");
+      const message = err instanceof Error ? err.message : "The evaluation could not be completed. Please try again.";
+      setAgentLog(prev => prev.map(log => ({ ...log, status: log.status === "working" ? "error" : log.status })));
+      addLog("SYSTEM", message, "error");
+      setEvaluationError(message);
     } finally {
+      runningRef.current = false;
       setIsRunning(false);
     }
   };
 
   const handleExampleQuery = (q: string) => {
     setQuery(q);
-    const parsed = parseQueryForPorts(q);
+    setEvaluationError(null);
+    const parsed = parseRouteQuery(q);
     if (parsed) {
       setOrigin(parsed.origin);
       setDestination(parsed.destination);
@@ -218,12 +167,15 @@ export default function RouteAnalyzer() {
         {/* Agent log terminal */}
         <div
           ref={terminalRef}
+          role="log"
+          aria-live="polite"
+          aria-label="Evaluation activity"
           className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1.5 bg-[oklch(0.06_0.01_240)] min-h-0"
         >
           {agentLog.length === 0 && (
             <div className="space-y-2 text-muted-foreground/60">
-              <div className="text-primary/60">▸ RiskWise Multi-Agent System v2.4.1</div>
-              <div>▸ Agents online: ATHENA · HERMES · APOLLO</div>
+              <div className="text-primary/60">▸ RiskWise Route Analysis</div>
+              <div>▸ Research · Risk scoring · Route alternatives</div>
               <div>▸ Enter a query or fill in the port fields below</div>
               <div className="mt-4 text-[10px] text-muted-foreground/40">
                 ─────────────────────────────────────
@@ -264,7 +216,7 @@ export default function RouteAnalyzer() {
         </div>
 
         {/* Input area */}
-        <div className="shrink-0 border-t border-border p-4 space-y-3 bg-card/50">
+        <form onSubmit={(event) => { event.preventDefault(); void handleRun(); }} className="shrink-0 border-t border-border p-4 space-y-3 bg-card/50">
           {/* Natural language query */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-primary font-mono text-xs">›</div>
@@ -273,7 +225,10 @@ export default function RouteAnalyzer() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !isRunning && handleRun()}
+              aria-label="Route query"
+              aria-describedby="route-input-help"
+              maxLength={2000}
+              disabled={isRunning}
               placeholder="Natural language query (optional)..."
               className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm pl-7 pr-4 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
             />
@@ -282,9 +237,12 @@ export default function RouteAnalyzer() {
           {/* Port fields */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase block mb-1">Origin Port</label>
+              <label htmlFor="origin-port" className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase block mb-1">Origin Port</label>
               <input
                 type="text"
+                id="origin-port"
+                maxLength={100}
+                disabled={isRunning}
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="Port of Shanghai"
@@ -292,9 +250,12 @@ export default function RouteAnalyzer() {
               />
             </div>
             <div>
-              <label className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase block mb-1">Destination Port</label>
+              <label htmlFor="destination-port" className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase block mb-1">Destination Port</label>
               <input
                 type="text"
+                id="destination-port"
+                maxLength={100}
+                disabled={isRunning}
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="Port of Rotterdam"
@@ -303,8 +264,9 @@ export default function RouteAnalyzer() {
             </div>
           </div>
 
+          <p id="route-input-help" className="text-[11px] text-muted-foreground">Enter both ports, or use a “from … to …” query.</p>
           <button
-            onClick={handleRun}
+            type="submit"
             disabled={isRunning}
             className={cn(
               "w-full flex items-center justify-center gap-2 py-2.5 rounded-sm font-mono text-sm font-bold tracking-wider transition-all duration-200",
@@ -325,12 +287,28 @@ export default function RouteAnalyzer() {
               </>
             )}
           </button>
-        </div>
+        </form>
       </div>
 
       {/* Right panel: Results */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
-        {!result && !isRunning && (
+        {isRunning && (
+          <div role="status" className="cyber-card p-6 space-y-3">
+            <Cpu className="h-6 w-6 animate-pulse text-primary" aria-hidden="true" />
+            <h2 className="font-display text-lg text-foreground">Analyzing your route</h2>
+            <p className="text-sm text-muted-foreground">Gathering intelligence and calculating risk. This can take a few minutes. Results will appear here when ready.</p>
+          </div>
+        )}
+        {evaluationError && !isRunning && (
+          <div role="alert" className="cyber-card border border-destructive/40 p-5 space-y-3">
+            <h2 className="font-display text-base text-foreground">Evaluation could not be completed</h2>
+            <p className="text-sm text-muted-foreground">{evaluationError}</p>
+            {evalledOrigin && evalledDestination && (
+              <button type="button" onClick={() => void handleRun()} className="rounded-sm border border-primary/40 px-4 py-2 text-xs font-mono text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary">Retry evaluation</button>
+            )}
+          </div>
+        )}
+        {!result && !isRunning && !evaluationError && (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3">
               <Route className="w-12 h-12 text-primary/20 mx-auto" />

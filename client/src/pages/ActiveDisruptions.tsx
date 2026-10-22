@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { QueryError } from "@/components/QueryError";
 import { getSeverityTextClass, getSeverityColor, getCategoryIcon, getCategoryColor } from "@/lib/riskUtils";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Filter, RefreshCw, MapPin, ExternalLink, Clock } from "lucide-react";
@@ -33,7 +34,7 @@ export default function ActiveDisruptions() {
   const [filterCategory, setFilterCategory] = useState<Category | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<Severity | null>(null);
 
-  const { data: disruptions, isLoading, refetch, dataUpdatedAt } = trpc.events.active.useQuery(
+  const { data: disruptions, isLoading, isError, isFetching, refetch, dataUpdatedAt } = trpc.events.active.useQuery(
     {
       category: filterCategory ?? undefined,
       severity: filterSeverity ?? undefined,
@@ -54,7 +55,7 @@ export default function ActiveDisruptions() {
             <div>
               <h2 className="font-display text-base font-bold text-foreground tracking-wider">ACTIVE DISRUPTIONS</h2>
               <p className="text-[11px] font-mono text-muted-foreground">
-                {disruptions?.length ?? 0} events tracked
+                {disruptions ? `${disruptions.length} events tracked` : isError ? "Feed unavailable" : "Loading disruptions…"}
                 {dataUpdatedAt ? ` · Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}
               </p>
             </div>
@@ -74,6 +75,8 @@ export default function ActiveDisruptions() {
             )}
             <button
               onClick={() => refetch()}
+              aria-label="Refresh disruptions"
+              disabled={isFetching}
               className="p-2 rounded-sm border border-border text-muted-foreground hover:text-foreground hover:border-border/80 transition-all"
             >
               <RefreshCw className="w-4 h-4" />
@@ -170,6 +173,7 @@ export default function ActiveDisruptions() {
 
       {/* Events list */}
       <div className="flex-1 overflow-y-auto p-5 space-y-3 min-h-0">
+        {isError && <QueryError title="Could not load disruptions" onRetry={() => { void refetch(); }} isRetrying={isFetching} hasCachedData={Boolean(disruptions)} />}
         {isLoading && (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
@@ -200,7 +204,7 @@ export default function ActiveDisruptions() {
           </div>
         )}
 
-        {!isLoading && (!disruptions || disruptions.length === 0) && (
+        {!isLoading && !isError && (!disruptions || disruptions.length === 0) && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <AlertTriangle className="w-8 h-8 text-muted-foreground/30" />
             <p className="text-sm font-mono text-muted-foreground">No active disruptions matching filters.</p>

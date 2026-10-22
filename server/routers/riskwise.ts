@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { routeEvaluationInputSchema } from "@shared/routeInput";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { notifyOwner } from "../_core/notification";
 import {
@@ -15,13 +16,7 @@ import { orchestrate } from "../agents";
 // ── Routes Router ─────────────────────────────────────────────────────────────
 export const routesRouter = router({
   evaluate: publicProcedure
-    .input(
-      z.object({
-        origin: z.string().min(2),
-        destination: z.string().min(2),
-        queryText: z.string().optional(),
-      })
-    )
+    .input(routeEvaluationInputSchema)
     .mutation(async ({ input }) => {
       // Fetch active disruptions for context
       const disruptions = await getActiveRiskEvents();

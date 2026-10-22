@@ -66,6 +66,7 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
             </p>
           </div>
           <button
+            aria-label="Close navigation"
             className="ml-auto lg:hidden text-muted-foreground hover:text-foreground"
             onClick={() => setSidebarOpen(false)}
           >
@@ -76,7 +77,7 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
         {/* Status indicator */}
         <div className="mx-4 my-3 px-3 py-2 rounded-sm border border-neon-green bg-[oklch(0.82_0.22_145/0.05)] flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-[oklch(0.82_0.22_145)] neon-pulse" />
-          <span className="text-[11px] font-mono text-[oklch(0.82_0.22_145)]">SYSTEM ONLINE</span>
+          <span className="text-[11px] font-mono text-[oklch(0.82_0.22_145)]">RISK INTELLIGENCE</span>
           <Zap className="w-3 h-3 text-[oklch(0.82_0.22_145)] ml-auto" />
         </div>
 
@@ -127,7 +128,7 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
         {/* Footer */}
         <div className="px-4 py-4 border-t border-sidebar-border">
           <div className="text-[10px] font-mono text-muted-foreground/60 text-center">
-            <div>RISKWISE v2.4.1</div>
+            <div>RISKWISE</div>
             <div className="mt-0.5">AGENTS: ATHENA · HERMES · APOLLO</div>
           </div>
         </div>
@@ -138,6 +139,7 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
         {/* Top bar */}
         <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
           <button
+            aria-label="Open navigation"
             className="lg:hidden text-muted-foreground hover:text-foreground"
             onClick={() => setSidebarOpen(true)}
           >
@@ -152,7 +154,7 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
               <span className="text-[oklch(0.82_0.22_145)]">●</span>
-              <span>3 AGENTS ACTIVE</span>
+              <span>3 ANALYSIS AGENTS</span>
             </div>
             <div className="text-xs font-mono text-muted-foreground">
               {new Date().toUTCString().slice(0, 25)} UTC

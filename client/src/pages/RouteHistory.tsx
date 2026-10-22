@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { QueryError } from "@/components/QueryError";
 import {
   getRiskTextClass,
   getRiskBorderClass,
@@ -117,7 +118,7 @@ function RouteTrendSparkline({ originPort, destinationPort }: { originPort: stri
 export default function RouteHistory() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const { data: history, isLoading, refetch } = trpc.routes.history.useQuery({ limit: 20 });
+  const { data: history, isLoading, isError, isFetching, refetch } = trpc.routes.history.useQuery({ limit: 20 });
   const rerunMutation = trpc.routes.rerun.useMutation({
     onSuccess: (result) => {
       toast.success(`Re-run complete — Risk Score: ${result.overallRiskScore}/100`);
@@ -143,12 +144,14 @@ export default function RouteHistory() {
           <div>
             <h2 className="font-display text-base font-bold text-foreground tracking-wider">ROUTE HISTORY</h2>
             <p className="text-[11px] font-mono text-muted-foreground">
-              {history?.length ?? 0} past evaluations
+              {history ? `${history.length} past evaluations` : isError ? "History unavailable" : "Loading history…"}
             </p>
           </div>
         </div>
         <button
           onClick={() => refetch()}
+          aria-label="Refresh route history"
+          disabled={isFetching}
           className="p-2 rounded-sm border border-border text-muted-foreground hover:text-foreground hover:border-border/80 transition-all"
         >
           <RefreshCw className="w-4 h-4" />
@@ -179,6 +182,7 @@ export default function RouteHistory() {
 
       {/* History list */}
       <div className="flex-1 overflow-y-auto p-5 space-y-2 min-h-0">
+        {isError && <QueryError title="Could not load route history" onRetry={() => { void refetch(); }} isRetrying={isFetching} hasCachedData={Boolean(history)} />}
         {isLoading && (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -201,7 +205,7 @@ export default function RouteHistory() {
           </div>
         )}
 
-        {!isLoading && (!history || history.length === 0) && (
+        {!isLoading && !isError && (!history || history.length === 0) && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <History className="w-8 h-8 text-muted-foreground/30" />
             <p className="text-sm font-mono text-muted-foreground">No evaluations yet.</p>

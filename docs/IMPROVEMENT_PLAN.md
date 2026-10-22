@@ -31,3 +31,5 @@ Days are work sessions, starting with the current session. This document is a wo
 2. **Analysis and recovery UX:** route examples and explicit port fields work together, requests begin immediately, agent results appear only after completion, request errors remain visible with retry, and failed data queries are distinguished from empty data. Includes this ten-day plan and regression coverage.
 
 Remaining priorities begin with Day 2's real-model/persistence checks and Day 3's intelligence-provenance changes. The current model-service availability must be checked at execution time.
+
+Day 1 validation: 61 tests passed across five files, TypeScript passed, and the production build passed with the existing large-chunk warning. Database-backed HTTP smoke requests passed. Chromium checks with controlled API responses covered all four example queries, partial endpoint entry, keyboard/duplicate submission, waiting and failure states, successful retry, history/disruption query recovery, and mobile entry without horizontal overflow or uncaught browser errors. No real-model success or deployment is claimed by these checks.

@@ -107,7 +107,7 @@ RISKWISE_LLM_MODEL=claude-sonnet-4-5
 pnpm dev        # start dev server
 pnpm build      # production build
 pnpm start      # run production build
-pnpm test       # vitest (17 tests)
+pnpm test       # vitest (61 tests)
 pnpm check      # TypeScript type check
 pnpm format     # Prettier
 pnpm db:push    # generate + apply DB migrations
@@ -157,11 +157,16 @@ drizzle/
 
 ## Tests
 
-17 tests in `server/riskwise.test.ts` covering:
-- Risk score color thresholds (Green/Amber/Red boundaries)
-- tRPC router procedures: events, routes, auth
-- Athena scan result validation (category/severity enums)
-- Critical notification threshold (score > 75)
+61 tests across five files cover:
+- Existing risk thresholds, router procedures, and logout behavior
+- Agent-result validation, geographic bounds, and prevention of invalid evaluation persistence
+- Model failures, safe provider errors, output-token limits, and connection/body timeouts
+- A shared live-intelligence snapshot for research and source reporting
+- Example-query parsing, partial port entry, and invalid direct API requests
+
+For route queries, use a form such as `from Shanghai to Rotterdam`, or fill in both port fields. Explicit port fields take precedence over ports inferred from a query. Blank, oversized, and identical endpoints are rejected before model work begins.
+
+Browser failure/retry scenarios are checked separately from real-model evaluations; the latter require a running model service and an available configured model.
 
 ---
 

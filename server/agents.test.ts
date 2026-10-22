@@ -66,6 +66,27 @@ beforeEach(() => {
 });
 
 describe("validated agent results", () => {
+  it.each([
+    { origin: "   ", destination: "Rotterdam" },
+    { origin: "Shanghai", destination: "PORT OF SHANGHAI" },
+    { origin: "x".repeat(101), destination: "Rotterdam" },
+  ])(
+    "rejects invalid route inputs before database or model work: %j",
+    async input => {
+      const caller = appRouter.createCaller({
+        user: null,
+        req: { headers: {} },
+        res: {},
+      } as TrpcContext);
+      await expect(caller.routes.evaluate(input)).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
+      expect(fetchAllRealTimeIntelligence).not.toHaveBeenCalled();
+      expect(invokeLLM).not.toHaveBeenCalled();
+      expect(insertRouteEvaluation).not.toHaveBeenCalled();
+    }
+  );
+
   it("stops the pipeline when Athena omits required intelligence fields", async () => {
     vi.mocked(invokeLLM).mockResolvedValue(
       completion({ relevantDisruptions: [] })

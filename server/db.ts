@@ -13,13 +13,22 @@ import {
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _client: ReturnType<typeof postgres> | null = null;
 
 function getDb() {
   if (!_db) {
-    const client = postgres(ENV.DATABASE_URL);
-    _db = drizzle(client);
+    _client = postgres(ENV.DATABASE_URL);
+    _db = drizzle(_client);
   }
   return _db;
+}
+
+/** Release the pool when the application or an isolated integration run ends. */
+export async function closeDb() {
+  const client = _client;
+  _db = null;
+  _client = null;
+  await client?.end({ timeout: 5 });
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

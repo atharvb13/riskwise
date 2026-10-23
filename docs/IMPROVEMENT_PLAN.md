@@ -33,3 +33,12 @@ Days are work sessions, starting with the current session. This document is a wo
 Remaining priorities begin with Day 2's real-model/persistence checks and Day 3's intelligence-provenance changes. The current model-service availability must be checked at execution time.
 
 Day 1 validation: 61 tests passed across five files, TypeScript passed, and the production build passed with the existing large-chunk warning. Database-backed HTTP smoke requests passed. Chromium checks with controlled API responses covered all four example queries, partial endpoint entry, keyboard/duplicate submission, waiting and failure states, successful retry, history/disruption query recovery, and mobile entry without horizontal overflow or uncaught browser errors. No real-model success or deployment is claimed by these checks.
+
+## Day 2 delivery
+
+1. **Database-backed workflow coverage:** added `pnpm test:integration` with nine tests using a UUID-named PostgreSQL database created specifically for the run. The suite applies the committed migration, exercises real tRPC and model HTTP transport, and removes its database afterward. It verifies evaluation persistence, high-risk alternatives, reruns, unchanged history after provider failures, invalid model results, stored-event filtering, and migration repeatability. Added explicit connection-pool cleanup so the run can release its resources.
+2. **Repeatable validation:** added a GitHub Actions workflow for unit tests, integration tests against PostgreSQL 17, TypeScript, and the production build. Documented the explicit test connection and how the suite avoids changing the database named in that connection. The provider and external feed responses remain controlled fixtures; CI needs no model API key or external alert webhook.
+
+The nine integration tests and all 61 unit tests passed locally. Hosted CI results must be checked separately after pushing.
+
+**Plan adjustment:** real-model verification remains outstanding. Model downloading repeatedly failed while the cloud environment disconnected. The second commit therefore delivers CI and test documentation rather than claiming a real-model success. Complete Day 2's real-model evaluation/history/rerun check in a stable environment before calling the project fully working. Deployment remains deferred.

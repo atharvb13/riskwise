@@ -108,6 +108,7 @@ pnpm dev        # start dev server
 pnpm build      # production build
 pnpm start      # run production build
 pnpm test       # vitest (61 tests)
+pnpm test:integration # HTTP/model-transport/PostgreSQL integration suite
 pnpm check      # TypeScript type check
 pnpm format     # Prettier
 pnpm db:push    # generate + apply DB migrations
@@ -167,6 +168,18 @@ drizzle/
 For route queries, use a form such as `from Shanghai to Rotterdam`, or fill in both port fields. Explicit port fields take precedence over ports inferred from a query. Blank, oversized, and identical endpoints are rejected before model work begins.
 
 Browser failure/retry scenarios are checked separately from real-model evaluations; the latter require a running model service and an available configured model.
+
+### Database integration tests
+
+Use a development PostgreSQL connection whose user can create databases:
+
+```bash
+RISKWISE_TEST_DATABASE_URL=postgresql://user:password@localhost:5432/postgres pnpm test:integration
+```
+
+The suite creates a fresh UUID-named database, applies the committed migration, and removes only that database afterward. It does not reset or migrate the database named in the supplied connection. The connection must be supplied explicitly; the suite fails if it is missing.
+
+These nine tests exercise real PostgreSQL queries, model HTTP requests, tRPC serialization, high-risk alternatives, reruns, validation failures, and provider outages. Intelligence feeds and model responses are controlled fixtures, so the suite requires no model API key and makes no external alert requests. The GitHub Actions workflow runs these checks against a PostgreSQL service in addition to unit tests, type checking, and the build.
 
 ---
 

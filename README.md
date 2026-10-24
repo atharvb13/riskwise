@@ -70,7 +70,7 @@ RISKWISE_ALERT_WEBHOOK_URL=
 ### Database
 
 ```bash
-pnpm db:push
+pnpm db:migrate
 ```
 
 ### Dev server
@@ -112,6 +112,7 @@ pnpm test:integration # HTTP/model-transport/PostgreSQL integration suite
 pnpm check      # TypeScript type check
 pnpm format     # Prettier
 pnpm db:push    # generate + apply DB migrations
+pnpm db:migrate # apply committed migrations without generating new files
 ```
 
 ---
@@ -168,6 +169,12 @@ drizzle/
 For route queries, use a form such as `from Shanghai to Rotterdam`, or fill in both port fields. Explicit port fields take precedence over ports inferred from a query. Blank, oversized, and identical endpoints are rejected before model work begins.
 
 Browser failure/retry scenarios are checked separately from real-model evaluations; the latter require a running model service and an available configured model.
+
+### Intelligence refresh and schema upgrades
+
+Run `pnpm db:migrate` before starting this version. The provenance migration preserves existing rows and their original age, marking records without evidence metadata as `legacy`. Those records remain stored but are excluded from the active feed and new analyses; source-backed scans populate current observations and labelled baselines.
+
+Scans refresh observations by provider and stable source identity. Repeated sightings update `lastSeenAt` without changing the first-seen `createdAt` or substituting retrieval time for source `observedAt`. Records not confirmed within 24 hours are excluded on reads and deactivated by subsequent scans. Static baselines remain explicitly distinct from live observations. Concurrent triggers share one scan per process; database advisory locks and unique fingerprints protect refreshes across workers. An older queued response cannot overwrite a newer observation, and a failed batch rolls back its writes.
 
 ### Database integration tests
 

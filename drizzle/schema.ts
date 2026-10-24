@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  index,
   json,
   pgEnum,
   pgTable,
@@ -9,6 +10,9 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import { SOURCE_KINDS } from "../shared/intelligence";
+
+export const eventSourceKindEnum = pgEnum("event_source_kind", SOURCE_KINDS);
 
 export const roleEnum = pgEnum("role", ["user", "admin"]);
 export const categoryEnum = pgEnum("risk_category", [
@@ -42,17 +46,29 @@ export type InsertUser = typeof users.$inferInsert;
 
 // ── Risk Events ───────────────────────────────────────────────────────────────
 
-export const riskEvents = pgTable("risk_events", {
-  id: serial("id").primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description").notNull(),
-  category: categoryEnum("category").notNull(),
-  severity: severityEnum("severity").notNull(),
-  affectedLocations: json("affected_locations").notNull().$type<string[]>(),
-  sourceUrl: text("source_url"),
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const riskEvents = pgTable(
+  "risk_events",
+  {
+    id: serial("id").primaryKey(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull(),
+    category: categoryEnum("category").notNull(),
+    severity: severityEnum("severity").notNull(),
+    affectedLocations: json("affected_locations").notNull().$type<string[]>(),
+    sourceUrl: text("source_url"),
+    sourceKind: eventSourceKindEnum("source_kind").default("legacy").notNull(),
+    sourceProvider: text("source_provider"),
+    sourceEventId: text("source_event_id"),
+    fingerprint: varchar("fingerprint", { length: 64 }).unique(),
+    observedAt: timestamp("observed_at"),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => [
+    index("risk_events_active_seen_idx").on(table.isActive, table.lastSeenAt),
+  ]
+);
 
 export type RiskEvent = typeof riskEvents.$inferSelect;
 export type InsertRiskEvent = typeof riskEvents.$inferInsert;

@@ -25,7 +25,7 @@ export const routesRouter = router({
         category: d.category,
         severity: d.severity,
         affectedLocations: (d.affectedLocations as string[]) ?? [],
-        description: d.description,
+        description: `[Stored ${d.sourceKind}; source: ${d.sourceProvider ?? "unknown"}; observed: ${d.observedAt?.toISOString() ?? "unknown"}; last checked: ${d.lastSeenAt.toISOString()}] ${d.description}`,
       }));
 
       // Run multi-agent orchestration
@@ -75,7 +75,7 @@ export const routesRouter = router({
         category: d.category,
         severity: d.severity,
         affectedLocations: (d.affectedLocations as string[]) ?? [],
-        description: d.description,
+        description: `[Stored ${d.sourceKind}; source: ${d.sourceProvider ?? "unknown"}; observed: ${d.observedAt?.toISOString() ?? "unknown"}; last checked: ${d.lastSeenAt.toISOString()}] ${d.description}`,
       }));
 
       const result = await orchestrate(existing.originPort, existing.destinationPort, disruptionContext);

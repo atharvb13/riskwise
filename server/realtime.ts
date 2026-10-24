@@ -431,7 +431,7 @@ export async function fetchAllRealTimeIntelligence(): Promise<DataFetchSummary> 
   const seen = new Set<string>();
   const deduped: LiveRiskEvent[] = [];
   for (const event of allEvents) {
-    const key = event.title.toLowerCase().slice(0, 60);
+    const key = JSON.stringify([event.sourceKind, event.sourceProvider, event.sourceEventId]);
     if (!seen.has(key)) {
       seen.add(key);
       deduped.push(event);

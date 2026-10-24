@@ -1,4 +1,5 @@
-export type SourceKind = "live" | "baseline" | "legacy";
+export const SOURCE_KINDS = ["live", "baseline", "legacy"] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export const EVENT_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 

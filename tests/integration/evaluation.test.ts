@@ -17,7 +17,7 @@ import {
 } from "vitest";
 import { createTestDatabase } from "../helpers/database";
 import type { AppRouter } from "../../server/routers";
-import type { DataFetchSummary } from "../../server/realtime";
+import type { LiveRiskEvent, DataFetchSummary } from "../../server/realtime";
 
 // Only external intelligence is mocked. SQL, migrations, router procedures,
 // tRPC serialization and the model's HTTP transport all run for real.
@@ -31,6 +31,7 @@ let api: Server;
 let provider: Server;
 let client: TRPCClient<AppRouter>;
 let closeDb: () => Promise<void>;
+let refreshRiskEvents: typeof import("../../server/db").refreshRiskEvents;
 let score = 25;
 let providerFailure = false;
 let invalidResult = false;
@@ -53,7 +54,9 @@ const alternatives = [
 const intelligence: DataFetchSummary = {
   events: [],
   fetchedAt: "2026-10-22T00:00:00.000Z",
-  sources: [{ name: "Integration feed", count: 0, ok: true, sourceKind: "live" }],
+  sources: [
+    { name: "Integration feed", count: 0, ok: true, sourceKind: "live" },
+  ],
 };
 
 async function listen(server: Server) {
@@ -144,7 +147,7 @@ beforeAll(async () => {
   }
   const { appRouter } = await import("../../server/routers");
   const { createContext } = await import("../../server/_core/context");
-  ({ closeDb } = await import("../../server/db"));
+  ({ closeDb, refreshRiskEvents } = await import("../../server/db"));
   const app = express();
   app.use(express.json());
   app.use(
@@ -182,7 +185,7 @@ afterAll(async () => {
 
 describe("evaluation HTTP/database workflow", () => {
   it("persists a low-risk evaluation and reads it through serialized history", async () => {
-    await database.sql`INSERT INTO risk_events (title, description, category, severity, affected_locations) VALUES ('Integration port delay', 'A seeded database event.', 'Weather', 'Medium', ${JSON.stringify(["Port of Shanghai"])}::json)`;
+    await database.sql`INSERT INTO risk_events (title, description, category, severity, affected_locations, source_kind) VALUES ('Integration port delay', 'A seeded database event.', 'Weather', 'Medium', ${JSON.stringify(["Port of Shanghai"])}::json, 'live')`;
     const result = await client.routes.evaluate.mutate({
       origin: "  Port of   Shanghai ",
       destination: "Port of Rotterdam",
@@ -304,7 +307,7 @@ describe("evaluation HTTP/database workflow", () => {
   });
 
   it("filters real stored events and excludes inactive disruptions", async () => {
-    await database.sql`INSERT INTO risk_events (title, description, category, severity, affected_locations, is_active) VALUES ('Weather fixture', 'A storm', 'Weather', 'High', '[]', true), ('Strike fixture', 'A strike', 'Strike', 'Medium', '[]', true), ('Old storm', 'Inactive', 'Weather', 'High', '[]', false)`;
+    await database.sql`INSERT INTO risk_events (title, description, category, severity, affected_locations, is_active, source_kind) VALUES ('Weather fixture', 'A storm', 'Weather', 'High', '[]', true, 'live'), ('Strike fixture', 'A strike', 'Strike', 'Medium', '[]', true, 'live'), ('Old storm', 'Inactive', 'Weather', 'High', '[]', false, 'live')`;
     expect((await client.events.active.query()).map(row => row.title)).toEqual(
       expect.arrayContaining(["Weather fixture", "Strike fixture"])
     );
@@ -322,6 +325,140 @@ describe("evaluation HTTP/database workflow", () => {
     });
     const [row] =
       await database.sql`SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations`;
-    expect(row.count).toBe(1);
+    expect(row.count).toBe(2);
+  });
+});
+
+function observation(overrides: Partial<LiveRiskEvent> = {}): LiveRiskEvent {
+  return {
+    sourceKind: "live",
+    sourceProvider: "Integration observation",
+    sourceEventId: "event-1",
+    title: "Port weather delay",
+    description: "Sourced test observation.",
+    category: "Weather",
+    severity: "Medium",
+    affectedLocations: ["Port of Shanghai"],
+    sourceUrl: "https://example.com/evidence",
+    observedAt: "2026-10-24T06:00:00.000Z",
+    fetchedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+describe("atomic intelligence refresh", () => {
+  it("updates a stable source identity without duplicating it or changing first-seen time", async () => {
+    const now = new Date();
+    const event = observation({ fetchedAt: now.toISOString() });
+    await refreshRiskEvents([event], now);
+    const [first] = await database.sql`SELECT * FROM risk_events`;
+    const next = new Date(now.getTime() + 60000);
+    await refreshRiskEvents(
+      [
+        {
+          ...event,
+          title: "Updated weather delay",
+          severity: "High",
+          fetchedAt: next.toISOString(),
+        },
+      ],
+      next
+    );
+    const rows = await database.sql`SELECT * FROM risk_events`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: first.id,
+      created_at: first.created_at,
+      severity: "High",
+      source_url: event.sourceUrl,
+      source_kind: "live",
+      source_event_id: "event-1",
+    });
+    const [stored] = await client.events.active.query();
+    expect(stored.lastSeenAt).toEqual(next);
+    expect(stored.observedAt?.toISOString()).toBe(event.observedAt);
+  });
+
+  it("keeps separate baseline identities even when they share a definition URL", async () => {
+    await refreshRiskEvents([
+      observation({
+        sourceKind: "baseline",
+        sourceEventId: "UA",
+        observedAt: null,
+      }),
+      observation({
+        sourceKind: "baseline",
+        sourceEventId: "YE",
+        observedAt: null,
+      }),
+    ]);
+    expect(await database.sql`SELECT id FROM risk_events`).toHaveLength(2);
+    expect(await client.events.active.query()).toMatchObject([
+      { sourceKind: "baseline" },
+      { sourceKind: "baseline" },
+    ]);
+  });
+
+  it("excludes expired and unverified records on reads, even before a scheduled cleanup", async () => {
+    const old = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    await database.sql`INSERT INTO risk_events (title, description, category, severity, affected_locations, source_kind, last_seen_at) VALUES ('Old evidence', 'Old', 'Weather', 'High', '[]', 'live', ${old.toISOString()}::timestamp), ('Unverified legacy', 'Unknown', 'Weather', 'High', '[]', 'legacy', now())`;
+    expect(await client.events.active.query()).toEqual([]);
+    expect(await refreshRiskEvents([])).toMatchObject({
+      skipped: false,
+      expired: 2,
+    });
+    const rows = await database.sql`SELECT is_active FROM risk_events`;
+    expect(rows).toHaveLength(2);
+    expect(rows.every(row => row.is_active === false)).toBe(true);
+  });
+
+  it("does not overwrite a newer observation or revive stale queued data", async () => {
+    const now = new Date();
+    const event = observation({ fetchedAt: now.toISOString() });
+    await refreshRiskEvents([event], now);
+    await refreshRiskEvents(
+      [
+        {
+          ...event,
+          severity: "Critical",
+          fetchedAt: new Date(now.getTime() - 3600000).toISOString(),
+        },
+        observation({
+          sourceEventId: "stale",
+          fetchedAt: new Date(now.getTime() - 25 * 3600000).toISOString(),
+        }),
+      ],
+      now
+    );
+    const rows =
+      await database.sql`SELECT severity, last_seen_at FROM risk_events`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].severity).toBe("Medium");
+    expect((await client.events.active.query())[0].lastSeenAt).toEqual(now);
+  });
+
+  it("skips concurrent writes from another worker holding the scan lock", async () => {
+    await database.sql.begin(async transaction => {
+      await transaction`SELECT pg_advisory_xact_lock(824013, 1)`;
+      expect(await refreshRiskEvents([observation()])).toEqual({
+        skipped: true,
+        stored: 0,
+        expired: 0,
+      });
+    });
+    expect(await database.sql`SELECT id FROM risk_events`).toHaveLength(0);
+    expect(await refreshRiskEvents([observation()])).toMatchObject({
+      skipped: false,
+      stored: 1,
+    });
+  });
+
+  it("rolls back the whole refresh if a later observation cannot be stored", async () => {
+    const invalid = observation({
+      sourceEventId: "invalid",
+      category: "Invalid" as LiveRiskEvent["category"],
+    });
+    await expect(refreshRiskEvents([observation(), invalid])).rejects.toThrow();
+    expect(await database.sql`SELECT id FROM risk_events`).toHaveLength(0);
   });
 });

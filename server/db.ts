@@ -1,4 +1,7 @@
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, gt, lte, or, inArray, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { EVENT_FRESHNESS_MS, observedTimestamp, safeSourceUrl } from "@shared/intelligence";
+import type { LiveRiskEvent } from "./realtime";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -52,13 +55,47 @@ export async function getActiveRiskEvents() {
   return db
     .select()
     .from(riskEvents)
-    .where(eq(riskEvents.isActive, true))
+    .where(and(eq(riskEvents.isActive, true), inArray(riskEvents.sourceKind, ["live", "baseline"]), gt(riskEvents.lastSeenAt, new Date(Date.now() - EVENT_FRESHNESS_MS))))
     .orderBy(desc(riskEvents.createdAt));
 }
 
 export async function insertRiskEvent(event: InsertRiskEvent) {
   const db = getDb();
   return db.insert(riskEvents).values(event);
+}
+
+/** Atomically refresh observations by source identity, preserving first-seen time. */
+export async function refreshRiskEvents(events: LiveRiskEvent[], now = new Date()) {
+  return getDb().transaction(async transaction => {
+    const [lock] = await transaction.execute(sql`SELECT pg_try_advisory_xact_lock(824013, 1) AS locked`);
+    if (!lock.locked) return { skipped: true, stored: 0, expired: 0 };
+    const cutoff = new Date(now.getTime() - EVENT_FRESHNESS_MS);
+    let stored = 0;
+    for (const event of events) {
+      const fetched = observedTimestamp(event.fetchedAt);
+      if (!fetched || !event.title.trim() || !event.sourceProvider.trim() || !event.sourceEventId.trim()) continue;
+      const lastSeenAt = new Date(Math.min(now.getTime(), Date.parse(fetched)));
+      if (lastSeenAt <= cutoff) continue;
+      const fingerprint = createHash("sha256").update(JSON.stringify([event.sourceKind, event.sourceProvider.trim().toLowerCase(), event.sourceEventId.trim()])).digest("hex");
+      const observed = observedTimestamp(event.observedAt);
+      const values = {
+        title: event.title.trim().slice(0, 255), description: event.description,
+        category: event.category, severity: event.severity, affectedLocations: event.affectedLocations,
+        sourceUrl: safeSourceUrl(event.sourceUrl), sourceKind: event.sourceKind,
+        sourceProvider: event.sourceProvider, sourceEventId: event.sourceEventId, fingerprint,
+        observedAt: observed ? new Date(observed) : null, lastSeenAt, isActive: true,
+      };
+      const rows = await transaction.insert(riskEvents).values(values).onConflictDoUpdate({
+        target: riskEvents.fingerprint, set: values,
+        setWhere: lte(riskEvents.lastSeenAt, lastSeenAt),
+      }).returning({ id: riskEvents.id });
+      stored += rows.length;
+    }
+    const expired = await transaction.update(riskEvents).set({ isActive: false })
+      .where(and(eq(riskEvents.isActive, true), or(lte(riskEvents.lastSeenAt, cutoff), eq(riskEvents.sourceKind, "legacy"))))
+      .returning({ id: riskEvents.id });
+    return { skipped: false, stored, expired: expired.length };
+  });
 }
 
 // ── Shipping Routes ───────────────────────────────────────────────────────────

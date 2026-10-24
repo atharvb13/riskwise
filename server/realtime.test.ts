@@ -46,6 +46,21 @@ function mockFeeds(news = rss) {
 }
 
 describe("intelligence provenance", () => {
+  it("does not merge distinct source events just because their title prefixes match", async () => {
+    const prefix = "Port shipping disruption ".repeat(4);
+    mockFeeds(
+      rss
+        .replace("Port shipping delay near Taiwan", prefix + "first")
+        .replace(
+          "</channel>",
+          `<item><title>${prefix}second</title><link>https://news.example/second</link></item></channel>`
+        )
+    );
+    const summary = await fetchAllRealTimeIntelligence();
+    expect(
+      summary.events.filter(event => event.sourceProvider === "BBC World")
+    ).toHaveLength(2);
+  });
   it("preserves stable source identities, evidence links and source observation times", async () => {
     mockFeeds();
     const summary = await fetchAllRealTimeIntelligence();

@@ -24,7 +24,7 @@ See the [10-day improvement plan](docs/IMPROVEMENT_PLAN.md) for the current prio
 
 Three agents collaborate on every route evaluation:
 
-- **Athena** - researcher. Fetches live intelligence from GDELT RSS, NASA EONET, USGS. Runs hourly background scan to populate the disruption feed.
+- **Athena** - researcher. Fetches sourced observations from BBC/Al Jazeera/NYT RSS, NASA EONET, and USGS. Hourly scans store those observations and explicitly labelled static country baselines; they never generate news with a model. Evidence links and source observation times are retained separately from retrieval times.
 - **Hermes** - risk modeler. Scores weather, geopolitical, labor, and congestion risk on a 0-100 scale, with per-factor breakdown.
 - **Apollo** - route optimizer. Suggests alternative routes when overall risk is high.
 

@@ -93,17 +93,10 @@ export function logRouteEvaluation(data: {
 }
 
 export function logAthenaScan(data: {
-  source: "live" | "llm-fallback";
-  provider?: string;
-  title: string;
-  severity: string;
-  category: string;
+  liveCount: number;
+  baselineCount: number;
   durationMs: number;
-  success: boolean;
-  error?: string;
 }): void {
-  auditLogger.info(
-    { event: "athena_scan", ...data },
-    `SCAN source=${data.source} severity=${data.severity} [${data.durationMs}ms]`,
-  );
+  auditLogger.info({ event: "athena_scan", ...data },
+    `SCAN live=${data.liveCount} baseline=${data.baselineCount} [${data.durationMs}ms]`);
 }

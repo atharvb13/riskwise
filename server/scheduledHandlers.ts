@@ -5,19 +5,21 @@ import { insertRiskEvent } from "./db";
 export async function athenaHourlyScan(): Promise<void> {
   logger.info("[Athena Scan] Starting hourly disruption scan");
   try {
-    const newEvent = await runAthenaScan();
-    await insertRiskEvent({
-      title: newEvent.title,
-      description: newEvent.description,
-      category: newEvent.category,
-      severity: newEvent.severity,
-      affectedLocations: newEvent.affectedLocations,
-      sourceUrl: null,
-      isActive: true,
-    });
+    const intelligence = await runAthenaScan();
+    for (const newEvent of intelligence.events) {
+      await insertRiskEvent({
+        title: newEvent.title,
+        description: `[${newEvent.sourceKind === "baseline" ? "Static baseline" : "Live source"} — ${newEvent.sourceProvider}] ${newEvent.description}`,
+        category: newEvent.category,
+        severity: newEvent.severity,
+        affectedLocations: newEvent.affectedLocations,
+        sourceUrl: newEvent.sourceUrl ?? null,
+        isActive: true,
+      });
+    }
     logger.info(
-      { title: newEvent.title, severity: newEvent.severity },
-      "[Athena Scan] Event inserted"
+      { count: intelligence.events.length },
+      "[Athena Scan] Sourced events stored"
     );
   } catch (err) {
     logger.error({ err }, "[Athena Scan] Scan failed");

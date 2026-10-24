@@ -5,11 +5,12 @@
  *   1. RSS OSINT   – BBC World / Al Jazeera / NYT World (geopolitical/conflict)
  *   2. NASA EONET  – Active severe storms, volcanoes, sea ice
  *   3. USGS        – Significant earthquakes (M4.5+) in the last 24 h
- *   4. Country Risk – Composite risk index enriched with live quake data
+ *   4. Country Risk – Bundled illustrative baseline, not a live data source
  *
  * All functions are server-side only and return normalised RiskWise event objects.
  */
 
+import { safeSourceUrl, observedTimestamp } from "@shared/intelligence";
 import { createLogger } from "./_core/logger";
 
 const log = createLogger("realtime");
@@ -17,6 +18,9 @@ const log = createLogger("realtime");
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface LiveRiskEvent {
+  sourceKind: "live" | "baseline";
+  sourceEventId: string;
+  observedAt: string | null;
   title: string;
   description: string;
   category: "Weather" | "Strike" | "Geopolitical" | "Port Congestion";
@@ -30,7 +34,7 @@ export interface LiveRiskEvent {
 export interface DataFetchSummary {
   events: LiveRiskEvent[];
   fetchedAt: string;
-  sources: { name: string; count: number; ok: boolean }[];
+  sources: { name: string; count: number; ok: boolean; sourceKind: "live" | "baseline" }[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -109,6 +113,8 @@ async function fetchRssOsint(): Promise<{ events: LiveRiskEvent[]; count: number
       });
       if (!res.ok) continue;
       const xml = await res.text();
+      if (!/<rss(?:\s|>)/i.test(xml)) throw new Error("Invalid RSS response");
+      ok = true;
 
       const items = xml.match(/<item>([\s\S]*?)<\/item>/gi) || [];
 
@@ -124,7 +130,7 @@ async function fetchRssOsint(): Promise<{ events: LiveRiskEvent[]; count: number
         if (!titleMatch) continue;
 
         const title = titleMatch[1].replace(/<[^>]+>/g, "").trim();
-        const link = linkMatch?.[1]?.trim() ?? "";
+        const link = safeSourceUrl(linkMatch?.[1]) ?? undefined;
         const rawDesc = descMatch ? descMatch[1].replace(/<[^>]+>/g, "").trim() : "";
         const textToSearch = (title + " " + rawDesc).toLowerCase();
 
@@ -202,6 +208,9 @@ async function fetchRssOsint(): Promise<{ events: LiveRiskEvent[]; count: number
             : `${feed.source} reports: ${title}`;
 
         events.push({
+          sourceKind: "live",
+          sourceEventId: link ?? title,
+          observedAt: observedTimestamp(item.match(/<pubDate>(.*?)<\/pubDate>/i)?.[1]),
           title: title.slice(0, 200),
           description,
           category,
@@ -272,12 +281,15 @@ async function fetchNasaEonet(): Promise<{ events: LiveRiskEvent[]; count: numbe
       }
 
       events.push({
-        title: event.title,
+        sourceKind: "live",
+        sourceEventId: String(event.id ?? event.title),
+        observedAt: observedTimestamp(geom.date),
+        title: String(event.title).slice(0, 255),
         description: `NASA EONET active event: ${event.title}. Category: ${event.categories?.[0]?.title ?? categoryId}. Last updated: ${geom.date ?? "recent"}.`,
         category: "Weather",
         severity,
         affectedLocations,
-        sourceUrl: event.sources?.[0]?.url ?? "https://eonet.gsfc.nasa.gov",
+        sourceUrl: safeSourceUrl(event.sources?.[0]?.url) ?? `https://eonet.gsfc.nasa.gov/api/v3/events/${encodeURIComponent(event.id ?? "")}`,
         sourceProvider: "NASA EONET",
         fetchedAt: new Date().toISOString(),
       });
@@ -324,12 +336,15 @@ async function fetchUsgsEarthquakes(): Promise<{ events: LiveRiskEvent[]; count:
         mag >= 7.0 ? "Critical" : mag >= 6.0 ? "High" : "Medium";
 
       events.push({
-        title: `M${mag.toFixed(1)} Earthquake — ${place}`,
+        sourceKind: "live",
+        sourceEventId: String(feature.id ?? `${props?.time}-${place}`),
+        observedAt: observedTimestamp(props?.time),
+        title: `M${mag.toFixed(1)} Earthquake — ${place}`.slice(0, 255),
         description: `USGS reports a magnitude ${mag.toFixed(1)} earthquake near ${place}. Potential impact on nearby port infrastructure and coastal shipping operations. Tsunami advisory status should be monitored.`,
         category: "Weather",
         severity,
         affectedLocations,
-        sourceUrl: props?.url ?? "https://earthquake.usgs.gov",
+        sourceUrl: safeSourceUrl(props?.url) ?? "https://earthquake.usgs.gov",
         sourceProvider: "USGS Earthquake Hazards",
         fetchedAt: new Date().toISOString(),
       });
@@ -372,13 +387,16 @@ async function fetchCountryRiskEvents(): Promise<{ events: LiveRiskEvent[]; coun
       data.base >= 85 ? "Critical" : data.base >= 72 ? "High" : "Medium";
 
     events.push({
-      title: `Elevated Country Risk: ${data.name} (Score ${data.base}/100)`,
-      description: `${data.name} carries a composite country risk score of ${data.base}/100. Active risk factors: ${data.tags.join(", ")}. Shipping routes passing through or near ${regions.join(", ")} may face elevated security, regulatory, or operational risk.`,
+      sourceKind: "baseline",
+      sourceEventId: code,
+      observedAt: null,
+      title: `Static country baseline: ${data.name}`,
+      description: `Bundled illustrative baseline, not a live observation or verified current risk assessment. ${data.name} has a configured baseline of ${data.base}/100. Active risk factors: ${data.tags.join(", ")}. Shipping routes passing through or near ${regions.join(", ")} may face elevated security, regulatory, or operational risk.`,
       category: "Geopolitical",
       severity,
       affectedLocations: regions,
-      sourceUrl: "https://github.com/simplifaisoul/osiris",
-      sourceProvider: "Osiris Country Risk Index",
+      sourceUrl: "https://github.com/atharvb13/riskwise/blob/main/server/realtime.ts",
+      sourceProvider: "RiskWise static baseline",
       fetchedAt: new Date().toISOString(),
     });
   }
@@ -428,10 +446,10 @@ export async function fetchAllRealTimeIntelligence(): Promise<DataFetchSummary> 
     events: deduped.slice(0, 30), // Cap at 30 events
     fetchedAt,
     sources: [
-      { name: "RSS OSINT (BBC/AJZ/NYT)", count: rss.count, ok: rss.ok },
-      { name: "NASA EONET", count: eonet.count, ok: eonet.ok },
-      { name: "USGS Earthquakes", count: usgs.count, ok: usgs.ok },
-      { name: "Osiris Country Risk", count: country.count, ok: country.ok },
+      { sourceKind: "live", name: "RSS OSINT (BBC/AJZ/NYT)", count: rss.count, ok: rss.ok },
+      { sourceKind: "live", name: "NASA EONET", count: eonet.count, ok: eonet.ok },
+      { sourceKind: "live", name: "USGS Earthquakes", count: usgs.count, ok: usgs.ok },
+      { sourceKind: "baseline", name: "RiskWise static baseline", count: country.count, ok: country.ok },
     ],
   };
 }

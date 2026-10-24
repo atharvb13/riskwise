@@ -24,7 +24,7 @@ import type { TrpcContext } from "./_core/context";
 const intelligence = {
   events: [],
   fetchedAt: "2026-10-21T00:00:00.000Z",
-  sources: [{ name: "Test feed", count: 0, ok: true }],
+  sources: [{ name: "Test feed", count: 0, ok: true, sourceKind: "live" as const }],
 };
 const athena = {
   relevantDisruptions: [],
@@ -97,19 +97,15 @@ describe("validated agent results", () => {
     expect(invokeLLM).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects a synthetic scan with a category that cannot be stored", async () => {
-    vi.mocked(invokeLLM).mockResolvedValue(
-      completion({
-        title: "Test",
-        description: "Test event",
-        category: "Earthquake",
-        severity: "High",
-        affectedLocations: ["Test port"],
-      })
-    );
-    await expect(runAthenaScan()).rejects.toMatchObject({
-      code: "BAD_GATEWAY",
-    });
+  it("never generates a synthetic disruption when no source events are available", async () => {
+    await expect(runAthenaScan()).resolves.toEqual(intelligence);
+    expect(invokeLLM).not.toHaveBeenCalled();
+  });
+
+  it("propagates a collection failure without inventing a news event", async () => {
+    vi.mocked(fetchAllRealTimeIntelligence).mockRejectedValue(new Error("Collection failed"));
+    await expect(runAthenaScan()).rejects.toThrow("Collection failed");
+    expect(invokeLLM).not.toHaveBeenCalled();
   });
 
   it("uses the same live snapshot for Athena's analysis and source reporting", async () => {

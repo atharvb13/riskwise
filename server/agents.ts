@@ -8,7 +8,7 @@
  */
 
 import { invokeLLM, type LLMConfig } from "./_core/llm";
-import { athenaResultSchema, hermesResultSchema, apolloResultSchema, athenaScanSchema, parseAgentResult } from "./agentResults";
+import { athenaResultSchema, hermesResultSchema, apolloResultSchema, parseAgentResult } from "./agentResults";
 import { ENV } from "./_core/env";
 import { createLogger, logAgentTelemetry, logAthenaScan, logRouteEvaluation } from "./_core/logger";
 import { fetchAllRealTimeIntelligence, type LiveRiskEvent, type DataFetchSummary } from "./realtime";
@@ -89,7 +89,7 @@ export interface OrchestrationResult {
   baseTransitDays: number;
   riskNarrative: string;
   intelligenceSummary: string;
-  dataSources: { name: string; count: number; ok: boolean }[];
+  dataSources: DataFetchSummary["sources"];
   alternativeRoutes: AlternativeRoute[];
   recommendation: string;
   baseRouteWaypoints: [number, number][];
@@ -109,10 +109,12 @@ export async function runAthena(
   try {
     const liveData = intelligence ?? await fetchAllRealTimeIntelligence();
     liveEvents = liveData.events;
-    const successfulSources = liveData.sources.filter((s) => s.ok).map((s) => `${s.name} (${s.count} events)`);
-    liveSourceSummary = successfulSources.length > 0
-      ? `Live intelligence fetched from: ${successfulSources.join(", ")} as of ${liveData.fetchedAt}`
-      : "Live intelligence sources unavailable — using database events only.";
+    const successfulSources = liveData.sources.filter((s) => s.ok && s.sourceKind === "live").map((s) => `${s.name} (${s.count} events)`);
+    const baselines = liveData.sources.filter((s) => s.sourceKind === "baseline").map((s) => s.name);
+    liveSourceSummary = (successfulSources.length > 0
+      ? `Live sources retrieved at ${liveData.fetchedAt}: ${successfulSources.join(", ")}. Retrieval time is not the observation time.`
+      : "Live intelligence sources unavailable — use stored evidence cautiously.")
+      + (baselines.length ? ` Static context: ${baselines.join(", ")}. These are illustrative baselines, not current observations.` : "");
     athenaLog.info(
       { eventCount: liveEvents.length, sourceCount: successfulSources.length, route: { origin, destination } },
       `Live data fetched: ${liveEvents.length} events from ${successfulSources.length} sources`,
@@ -128,7 +130,7 @@ export async function runAthena(
       category: e.category,
       severity: e.severity,
       affectedLocations: e.affectedLocations,
-      description: `[${e.sourceProvider}] ${e.description}`,
+      description: `[${e.sourceKind === "baseline" ? "STATIC BASELINE — not live" : "Live source"}: ${e.sourceProvider}; observed: ${e.observedAt ?? "unknown"}] ${e.description}`,
     })),
     ...activeDisruptions.slice(0, 10), // Keep up to 10 DB events as supplementary context
   ].slice(0, 30); // Cap total context at 30 events
@@ -491,117 +493,14 @@ export async function orchestrate(
 
 // ── Athena Background Scan ────────────────────────────────────────────────────
 
-/**
- * Athena Background Scan — now uses real-time data from live sources.
- * Fetches live events first; if available, picks the most critical one to persist.
- * Falls back to LLM-generated synthetic event if all live sources fail.
- */
-export async function runAthenaScan(): Promise<{
-  title: string;
-  description: string;
-  category: "Weather" | "Strike" | "Geopolitical" | "Port Congestion";
-  severity: "Low" | "Medium" | "High" | "Critical";
-  affectedLocations: string[];
-}> {
-  const scanStart = Date.now();
-
-  // Try live sources first
-  try {
-    const liveData = await fetchAllRealTimeIntelligence();
-    if (liveData.events.length > 0) {
-      // Pick the highest-severity event that isn't already a country-risk entry
-      const candidate = liveData.events.find((e) => e.sourceProvider !== "Osiris Country Risk Index") ?? liveData.events[0];
-      athenaLog.info(
-        { provider: candidate.sourceProvider, severity: candidate.severity, title: candidate.title },
-        `Scan picked live event from ${candidate.sourceProvider}`,
-      );
-      const result = {
-        title: candidate.title,
-        description: `[Live — ${candidate.sourceProvider}] ${candidate.description}`,
-        category: candidate.category,
-        severity: candidate.severity,
-        affectedLocations: candidate.affectedLocations,
-      };
-      logAthenaScan({
-        source: "live",
-        provider: candidate.sourceProvider,
-        title: candidate.title,
-        severity: candidate.severity,
-        category: candidate.category,
-        durationMs: Date.now() - scanStart,
-        success: true,
-      });
-      return result;
-    }
-  } catch (e) {
-    athenaLog.warn({ err: e }, "Live fetch failed during Athena scan, falling back to LLM generation");
-  }
-
-  // Fallback: LLM-generated synthetic event
-  athenaLog.warn("All live sources empty, generating synthetic event via LLM");
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: `You are Athena, the logistics intelligence researcher for RiskWise. Generate a realistic new supply chain disruption event that could affect global shipping. Base it on plausible real-world scenarios involving ports, shipping lanes, weather, labor disputes, or geopolitical events. Always respond with valid JSON only.`,
-      },
-      {
-        role: "user",
-        content: `Generate one new realistic supply chain disruption event for the current date. Make it specific, plausible, and impactful. Use one of these categories: Weather, Strike, Geopolitical, Port Congestion. Use one of these severities: Low, Medium, High, Critical.
-
-Respond with JSON in this exact format:
-{
-  "title": "string - concise event title",
-  "description": "string - 2-3 sentence detailed description",
-  "category": "Weather|Strike|Geopolitical|Port Congestion",
-  "severity": "Low|Medium|High|Critical",
-  "affectedLocations": ["string - port or region names"]
-}`,
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "athena_scan_result",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            description: { type: "string" },
-            category: { type: "string", enum: ["Weather", "Strike", "Geopolitical", "Port Congestion"] },
-            severity: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
-            affectedLocations: { type: "array", items: { type: "string" } },
-          },
-          required: ["title", "description", "category", "severity", "affectedLocations"],
-          additionalProperties: false,
-        },
-      },
-    },
-  }, athenaConfig);
-
-  const parsed = parseAgentResult(athenaScanSchema, response, "Athena");
-
-  logAgentTelemetry({
-    agent: "athena-scan",
-    model: response._model,
-    latencyMs: response._latencyMs,
-    promptTokens: response.usage?.prompt_tokens,
-    completionTokens: response.usage?.completion_tokens,
-    totalTokens: response.usage?.total_tokens,
-    success: true,
-  });
-
-  logAthenaScan({
-    source: "llm-fallback",
-    title: parsed.title ?? "unknown",
-    severity: parsed.severity ?? "unknown",
-    category: parsed.category ?? "unknown",
-    durationMs: Date.now() - scanStart,
-    success: true,
-  });
-
-  return parsed;
+/** Fetch sourced observations and explicitly marked baselines; never generate news. */
+export async function runAthenaScan(): Promise<DataFetchSummary> {
+  const started = Date.now();
+  const intelligence = await fetchAllRealTimeIntelligence();
+  const liveCount = intelligence.events.filter(event => event.sourceKind === "live").length;
+  const baselineCount = intelligence.events.filter(event => event.sourceKind === "baseline").length;
+  logAthenaScan({ liveCount, baselineCount, durationMs: Date.now() - started });
+  return intelligence;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -53,7 +53,7 @@ const alternatives = [
 const intelligence: DataFetchSummary = {
   events: [],
   fetchedAt: "2026-10-22T00:00:00.000Z",
-  sources: [{ name: "Integration feed", count: 0, ok: true }],
+  sources: [{ name: "Integration feed", count: 0, ok: true, sourceKind: "live" }],
 };
 
 async function listen(server: Server) {

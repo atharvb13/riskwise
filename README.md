@@ -107,7 +107,7 @@ RISKWISE_LLM_MODEL=claude-sonnet-4-5
 pnpm dev        # start dev server
 pnpm build      # production build
 pnpm start      # run production build
-pnpm test       # vitest (61 tests)
+pnpm test       # vitest (81 tests)
 pnpm test:integration # HTTP/model-transport/PostgreSQL integration suite
 pnpm check      # TypeScript type check
 pnpm format     # Prettier
@@ -159,11 +159,13 @@ drizzle/
 
 ## Tests
 
-61 tests across five files cover:
+81 tests across eight files cover:
 - Existing risk thresholds, router procedures, and logout behavior
 - Agent-result validation, geographic bounds, and prevention of invalid evaluation persistence
 - Model failures, safe provider errors, output-token limits, and connection/body timeouts
 - A shared live-intelligence snapshot for research and source reporting
+- Source provenance, safe evidence links, observation timestamps, and escaped map popup text
+- Scan coalescing and recovery after collection or database failures
 - Example-query parsing, partial port entry, and invalid direct API requests
 
 For route queries, use a form such as `from Shanghai to Rotterdam`, or fill in both port fields. Explicit port fields take precedence over ports inferred from a query. Blank, oversized, and identical endpoints are rejected before model work begins.
@@ -186,7 +188,7 @@ RISKWISE_TEST_DATABASE_URL=postgresql://user:password@localhost:5432/postgres pn
 
 The suite creates a fresh UUID-named database, applies the committed migration, and removes only that database afterward. It does not reset or migrate the database named in the supplied connection. The connection must be supplied explicitly; the suite fails if it is missing.
 
-These nine tests exercise real PostgreSQL queries, model HTTP requests, tRPC serialization, high-risk alternatives, reruns, validation failures, and provider outages. Intelligence feeds and model responses are controlled fixtures, so the suite requires no model API key and makes no external alert requests. The GitHub Actions workflow runs these checks against a PostgreSQL service in addition to unit tests, type checking, and the build.
+These fifteen tests exercise real PostgreSQL queries, model HTTP requests, tRPC serialization, high-risk alternatives, reruns, provider outages, deduplication, expiry, out-of-order updates, cross-worker locks, and atomic rollback. Intelligence feeds and model responses are controlled fixtures, so the suite requires no model API key and makes no external alert requests. The GitHub Actions workflow runs these checks against a PostgreSQL service in addition to unit tests, type checking, and the build.
 
 ---
 

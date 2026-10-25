@@ -42,3 +42,13 @@ Day 1 validation: 61 tests passed across five files, TypeScript passed, and the 
 The nine integration tests and all 61 unit tests passed locally. Hosted CI results must be checked separately after pushing.
 
 **Plan adjustment:** real-model verification remains outstanding. Model downloading repeatedly failed while the cloud environment disconnected. The second commit therefore delivers CI and test documentation rather than claiming a real-model success. Complete Day 2's real-model evaluation/history/rerun check in a stable environment before calling the project fully working. Deployment remains deferred.
+
+## Day 3 delivery
+
+The owner requested three commits for this session:
+
+1. **Sourced intelligence:** removed model-generated news fallback and retained source identity, evidence URLs, and observation time separately from retrieval time. Bundled country values are labelled illustrative static baselines. Healthy empty RSS feeds are distinguished from unavailable feeds, and unsafe evidence links are discarded.
+2. **Atomic scan lifecycle:** added a committed provenance migration, stable unique fingerprints, refresh-in-place without resetting first-seen time, a 24-hour confirmation window, and exclusion of unverified legacy records. In-process triggers coalesce; database advisory locks protect writes across workers. Older responses cannot overwrite newer observations, and invalid batches roll back. `pnpm db:migrate` applies the committed schema upgrades.
+3. **Evidence presentation:** disruption cards show provenance, source observation time, last source check, and evidence links. Static context is not counted as live critical incidents. Analysis and history distinguish live, baseline, unavailable, and unknown historical sources; history labels the evaluation-time snapshot. Map popup text is escaped before HTML rendering.
+
+Validation: 81 unit tests, 15 PostgreSQL integration tests, TypeScript, and the production build passed. The migration was applied in the development instance and its sourced-event API responded successfully. Chromium checks with controlled API data covered baseline-only and mixed views, unavailable and historical provenance, safe links and escaped popup text, dated history, and mobile layout without horizontal overflow or uncaught browser errors. Hosted CI and real-model evaluation remain separate checks; no deployment was performed.

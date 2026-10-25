@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  evidenceAge,
+  escapeEvidenceHtml,
   observedTimestamp,
   safeSourceUrl,
   sourceKindLabel,
 } from "./intelligence";
 
 describe("evidence metadata", () => {
+  it("supports serialized dates and never shows negative freshness ages", () => {
+    const now = Date.parse("2026-10-24T12:00:00Z");
+    expect(evidenceAge(new Date(now - 120000), now)).toBe("2m ago");
+    expect(evidenceAge(new Date(now + 60000), now)).toBe("just now");
+    expect(evidenceAge("invalid", now)).toBe("unknown");
+  });
+  it("escapes external text before it is placed in a map's HTML popup", () => {
+    expect(escapeEvidenceHtml(`<img src=x onerror='alert(1)'> & "news"`)).toBe(
+      "&lt;img src=x onerror=&#39;alert(1)&#39;&gt; &amp; &quot;news&quot;"
+    );
+  });
   it.each([
     undefined,
     "",

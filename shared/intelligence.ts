@@ -27,8 +27,34 @@ export function safeSourceUrl(value: unknown): string | null {
 }
 
 export function observedTimestamp(value: unknown): string | null {
+  if (value instanceof Date) value = value.getTime();
   if ((typeof value !== "string" && typeof value !== "number") || value === "")
     return null;
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+export function evidenceAge(value: unknown, now = Date.now()): string {
+  const timestamp = observedTimestamp(value);
+  if (!timestamp) return "unknown";
+  const minutes = Math.floor(Math.max(0, now - Date.parse(timestamp)) / 60000);
+  if (minutes === 0) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return `${Math.floor(minutes / 1440)}d ago`;
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+/** MapLibre HTML popups do not receive React's automatic text escaping. */
+export function escapeEvidenceHtml(value: unknown): string {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    character => HTML_ENTITIES[character]
+  );
 }

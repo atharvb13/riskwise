@@ -5,6 +5,7 @@ import { MapView as LibreMap } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
 import { getRiskColor, getSeverityColor, getCategoryIcon } from "@/lib/riskUtils";
 import { AlertTriangle, Layers, Eye, EyeOff, RefreshCw, Loader2 } from "lucide-react";
+import { escapeEvidenceHtml } from "@shared/intelligence";
 import { cn } from "@/lib/utils";
 
 // ── Coordinate lookups ───────────────────────────────────────────────────────
@@ -164,7 +165,7 @@ function buildDisruptionGeoJSON(events: RiskEvent[]): FeatureCollection<Point> {
 }
 
 function popupHTML(props: Record<string, string>) {
-  const color = props.color ?? "#888";
+  const color = getSeverityColor(props.severity);
   return `
     <div style="
       background: #0d1a2a;
@@ -177,13 +178,13 @@ function popupHTML(props: Record<string, string>) {
       color: #c8dce8;
     ">
       <div style="color:${color};font-size:10px;letter-spacing:2px;margin-bottom:6px;text-transform:uppercase;">
-        ${getCategoryIcon(props.category)} ${props.category}
+        ${getCategoryIcon(props.category)} ${escapeEvidenceHtml(props.category)}
       </div>
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#e8f4f8;line-height:1.3;">
-        ${props.title}
+        ${escapeEvidenceHtml(props.title)}
       </div>
       <div style="font-size:11px;color:#7a9ab0;line-height:1.6;margin-bottom:10px;">
-        ${(props.description ?? "").slice(0, 130)}${(props.description ?? "").length > 130 ? "…" : ""}
+        ${escapeEvidenceHtml((props.description ?? "").slice(0, 130))}${(props.description ?? "").length > 130 ? "…" : ""}
       </div>
       <span style="
         display:inline-block;
@@ -195,7 +196,7 @@ function popupHTML(props: Record<string, string>) {
         color:${color};
         letter-spacing:1.5px;
         text-transform:uppercase;
-      ">● SEVERITY: ${props.severity}</span>
+      ">● SEVERITY: ${escapeEvidenceHtml(props.severity)}</span>
     </div>`;
 }
 

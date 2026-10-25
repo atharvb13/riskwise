@@ -1,28 +1,10 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { EventEvidence } from "@/components/Evidence";
 import { QueryError } from "@/components/QueryError";
 import { getSeverityTextClass, getSeverityColor, getCategoryIcon, getCategoryColor } from "@/lib/riskUtils";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Filter, RefreshCw, MapPin, ExternalLink, Clock } from "lucide-react";
-
-function getEventAge(createdAt: Date | string): string {
-  const now = Date.now();
-  const created = new Date(createdAt).getTime();
-  const diffMs = now - created;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
-
-function getAgeColor(createdAt: Date | string): string {
-  const diffHours = (Date.now() - new Date(createdAt).getTime()) / 3600000;
-  if (diffHours < 1) return "oklch(0.75 0.20 145)"; // fresh green
-  if (diffHours < 24) return "oklch(0.80 0.20 75)"; // amber
-  return "oklch(0.55 0.04 220)"; // stale grey
-}
+import { AlertTriangle, Filter, RefreshCw, MapPin } from "lucide-react";
 
 type Category = "Weather" | "Strike" | "Geopolitical" | "Port Congestion";
 type Severity = "Low" | "Medium" | "High" | "Critical";
@@ -42,8 +24,10 @@ export default function ActiveDisruptions() {
     { refetchInterval: 60000 }
   );
 
-  const criticalCount = disruptions?.filter((d) => d.severity === "Critical").length ?? 0;
-  const highCount = disruptions?.filter((d) => d.severity === "High").length ?? 0;
+  const liveCount = disruptions?.filter(event => event.sourceKind === "live").length ?? 0;
+  const baselineCount = disruptions?.filter(event => event.sourceKind === "baseline").length ?? 0;
+  const criticalCount = disruptions?.filter((d) => d.sourceKind === "live" && d.severity === "Critical").length ?? 0;
+  const highCount = disruptions?.filter((d) => d.sourceKind === "live" && d.severity === "High").length ?? 0;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -55,8 +39,8 @@ export default function ActiveDisruptions() {
             <div>
               <h2 className="font-display text-base font-bold text-foreground tracking-wider">ACTIVE DISRUPTIONS</h2>
               <p className="text-[11px] font-mono text-muted-foreground">
-                {disruptions ? `${disruptions.length} events tracked` : isError ? "Feed unavailable" : "Loading disruptions…"}
-                {dataUpdatedAt ? ` · Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}
+                {disruptions ? `Live observations: ${liveCount} · Static baselines: ${baselineCount}` : isError ? "Feed unavailable" : "Loading disruptions…"}
+                {dataUpdatedAt ? ` · View refreshed ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}
               </p>
             </div>
           </div>
@@ -211,9 +195,10 @@ export default function ActiveDisruptions() {
           </div>
         )}
 
+        {!isLoading && baselineCount > 0 && liveCount === 0 && <p role="status" className="cyber-card p-4 text-sm text-muted-foreground">No live observations are available in this view. Static baselines do not confirm current disruptions.</p>}
         {disruptions?.map((event) => {
           const locations = event.affectedLocations as string[];
-          const severityColor = getSeverityColor(event.severity);
+          const severityColor = event.sourceKind === "baseline" ? "var(--muted-foreground)" : getSeverityColor(event.severity);
           const categoryColor = getCategoryColor(event.category);
 
           return (
@@ -238,23 +223,11 @@ export default function ActiveDisruptions() {
                         {event.category.toUpperCase()}
                       </span>
                       <span
-                        className={cn("text-[10px] font-mono font-bold", getSeverityTextClass(event.severity))}
+                        className={cn("text-[10px] font-mono font-bold", event.sourceKind === "baseline" ? "text-muted-foreground" : getSeverityTextClass(event.severity))}
                       >
-                        ● {event.severity.toUpperCase()}
+                        {event.sourceKind === "baseline" ? "BASELINE RISK: " : "● "}{event.severity.toUpperCase()}
                       </span>
                     </div>
-                  </div>
-                </div>
-                <div className="text-right shrink-0 space-y-1">
-                  <div
-                    className="flex items-center gap-1 justify-end text-[10px] font-mono font-bold"
-                    style={{ color: getAgeColor(event.createdAt) }}
-                  >
-                    <Clock className="w-2.5 h-2.5" />
-                    {getEventAge(event.createdAt)}
-                  </div>
-                  <div className="text-[9px] font-mono text-muted-foreground/40">
-                    {new Date(event.createdAt).toLocaleDateString()}
                   </div>
                 </div>
               </div>
@@ -275,19 +248,7 @@ export default function ActiveDisruptions() {
                 </div>
               </div>
 
-              {event.sourceUrl && (
-                <div className="mt-2 flex items-center gap-1">
-                  <ExternalLink className="w-3 h-3 text-muted-foreground/40" />
-                  <a
-                    href={event.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] font-mono text-muted-foreground/40 hover:text-primary transition-colors"
-                  >
-                    Source
-                  </a>
-                </div>
-              )}
+              <EventEvidence event={event} />
             </div>
           );
         })}

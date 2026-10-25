@@ -117,7 +117,7 @@ export async function runAthena(
       + (baselines.length ? ` Static context: ${baselines.join(", ")}. These are illustrative baselines, not current observations.` : "");
     athenaLog.info(
       { eventCount: liveEvents.length, sourceCount: successfulSources.length, route: { origin, destination } },
-      `Live data fetched: ${liveEvents.length} events from ${successfulSources.length} sources`,
+      `Intelligence collected: ${liveEvents.length} records; ${successfulSources.length} live sources available`,
     );
   } catch (e) {
     athenaLog.warn({ err: e, route: { origin, destination } }, "Real-time fetch failed, falling back to DB events");

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
 import { QueryError } from "@/components/QueryError";
 import {
@@ -217,7 +218,7 @@ export default function RouteHistory() {
           const isExpanded = expandedId === evaluation.id;
           const breakdown = evaluation.breakdown as { weather: number; labor: number; geopolitical: number; congestion: number };
           const altRoutes = evaluation.alternativeRoutes as { name: string; transitDays: number; riskScore: number; costImpact: string; description?: string }[] | null;
-          const dataSources = evaluation.dataSources as { name: string; count: number; ok: boolean }[] | null;
+          const dataSources = evaluation.dataSources as EvidenceSource[] | null;
           const riskNarrative = evaluation.riskNarrative as string | null;
           const intelligenceSummary = evaluation.intelligenceSummary as string | null;
 
@@ -380,29 +381,9 @@ export default function RouteHistory() {
                     </div>
                   )}
 
-                  {/* Data Sources — freshness & provenance */}
                   {dataSources && dataSources.length > 0 && (
                     <div className="border border-border/60 rounded-sm p-3 bg-secondary/20">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Database className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Data Sources</span>
-                        <span className="ml-auto text-[9px] font-mono text-muted-foreground/50">LIVE INTELLIGENCE</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {dataSources.map((src, i) => (
-                          <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
-                            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", src.ok ? "bg-[oklch(0.75_0.20_145)]" : "bg-[oklch(0.60_0.25_25)]")} />
-                            <span className="text-foreground/70 flex-1 truncate">{src.name}</span>
-                            <span className="text-muted-foreground/60">{src.count} event{src.count !== 1 ? "s" : ""}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <Zap className="w-3 h-3 text-muted-foreground/40" />
-                        <span className="text-[9px] font-mono text-muted-foreground/40">
-                          Scores are LLM-generated from live intelligence feeds. Validate critical decisions with official sources.
-                        </span>
-                      </div>
+                      <SourceSummary sources={dataSources} snapshotAt={evaluation.evaluatedAt} />
                     </div>
                   )}
 

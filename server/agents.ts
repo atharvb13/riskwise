@@ -9,7 +9,7 @@
 
 import { invokeLLM, type LLMConfig } from "./_core/llm";
 import { athenaResultSchema, hermesResultSchema, apolloResultSchema, parseAgentResult } from "./agentResults";
-import { getPortCoordinates } from "@shared/ports";
+import { approximatePortConnection } from "@shared/geography";
 import { ENV } from "./_core/env";
 import { createLogger, logAgentTelemetry, logAthenaScan, logRouteEvaluation } from "./_core/logger";
 import { fetchAllRealTimeIntelligence, type LiveRiskEvent, type DataFetchSummary } from "./realtime";
@@ -470,8 +470,8 @@ export async function orchestrate(
     `Orchestration complete in ${durationMs}ms`,
   );
 
-  // Generate base route waypoints (simplified great-circle approximation)
-  const baseRouteWaypoints = generateBaseWaypoints(origin, destination);
+  // Schematic spherical connection; not a navigable shipping route.
+  const baseRouteWaypoints = approximatePortConnection(origin, destination);
 
   return {
     overallRiskScore: Math.round(hermesResult.overallRiskScore),
@@ -502,25 +502,4 @@ export async function runAthenaScan(): Promise<DataFetchSummary> {
   const baselineCount = intelligence.events.filter(event => event.sourceKind === "baseline").length;
   logAthenaScan({ liveCount, baselineCount, durationMs: Date.now() - started });
   return intelligence;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function generateBaseWaypoints(
-  origin: string,
-  destination: string
-): [number, number][] {
-  const originCoords = getPortCoordinates(origin);
-  const destCoords = getPortCoordinates(destination);
-  if (!originCoords || !destCoords) return [];
-
-  const points: [number, number][] = [];
-  for (let i = 0; i <= 7; i++) {
-    const t = i / 7;
-    points.push([
-      originCoords[0] + (destCoords[0] - originCoords[0]) * t,
-      originCoords[1] + (destCoords[1] - originCoords[1]) * t,
-    ]);
-  }
-  return points;
 }

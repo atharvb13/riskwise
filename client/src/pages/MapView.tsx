@@ -1,35 +1,13 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import type { Feature, FeatureCollection, Point, LineString } from "geojson";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import type { FeatureCollection, Point } from "geojson";
 import maplibregl from "maplibre-gl";
 import { MapView as LibreMap } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
-import { getRiskColor, getSeverityColor, getCategoryIcon } from "@/lib/riskUtils";
+import { getCategoryIcon } from "@/lib/riskUtils";
 import { AlertTriangle, Layers, Eye, EyeOff, RefreshCw, Loader2 } from "lucide-react";
-import { getPortCoordinates } from "@shared/ports";
+import { buildBaseRouteGeoJSON, buildEvalRouteGeoJSON, buildDisruptionGeoJSON, getMapSeverityColor } from "@/lib/mapData";
 import { escapeEvidenceHtml } from "@shared/intelligence";
 import { cn } from "@/lib/utils";
-
-// ── Coordinate lookups ───────────────────────────────────────────────────────
-
-const DISRUPTION_COORDS: Record<string, [number, number]> = {
-  "Suez Canal": [32.3, 30.5],
-  "Red Sea": [38.0, 20.0],
-  "South China Sea": [115.0, 15.0],
-  "Panama Canal": [-79.5, 9.0],
-  "Taiwan Strait": [119.5, 24.0],
-  "Singapore Strait": [104.0, 1.2],
-  "Strait of Hormuz": [56.5, 26.5],
-  "North Atlantic Ocean": [-35.0, 45.0],
-  "Malacca Strait": [101.0, 3.0],
-  "Persian Gulf": [52.0, 26.0],
-  "Bab-el-Mandeb Strait": [43.5, 12.5],
-  "East China Sea": [125.0, 28.0],
-  "Gulf of Panama": [-79.0, 8.5],
-  "Caribbean Sea": [-75.0, 15.0],
-  "North Sea": [3.0, 56.0],
-  "Korea Strait": [129.0, 34.5],
-  "Yellow Sea": [123.0, 35.0],
-};
 
 // ── Source/layer IDs ─────────────────────────────────────────────────────────
 
@@ -48,86 +26,8 @@ const LAYER = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-type RiskEvent = {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  severity: string;
-  affectedLocations: unknown;
-};
-
-type RouteRecord = {
-  id: number;
-  waypoints: unknown;
-};
-
-type EvalRecord = {
-  originPort: string;
-  destinationPort: string;
-  overallRiskScore: number;
-};
-
-function buildBaseRouteGeoJSON(routes: RouteRecord[]): FeatureCollection<LineString> {
-  return {
-    type: "FeatureCollection",
-    features: routes.flatMap((route) => {
-      const wp = route.waypoints as [number, number][];
-      if (!wp || wp.length < 2) return [];
-      const f: Feature<LineString> = {
-        type: "Feature",
-        geometry: { type: "LineString", coordinates: wp },
-        properties: {},
-      };
-      return [f];
-    }),
-  };
-}
-
-function buildEvalRouteGeoJSON(history: EvalRecord[]): FeatureCollection<LineString> {
-  return {
-    type: "FeatureCollection",
-    features: history.flatMap((ev) => {
-      const origin = getPortCoordinates(ev.originPort);
-      const dest = getPortCoordinates(ev.destinationPort);
-      if (!origin || !dest) return [];
-      const f: Feature<LineString> = {
-        type: "Feature",
-        geometry: { type: "LineString", coordinates: [origin, dest] },
-        properties: { color: getRiskColor(ev.overallRiskScore) },
-      };
-      return [f];
-    }),
-  };
-}
-
-function buildDisruptionGeoJSON(events: RiskEvent[]): FeatureCollection<Point> {
-  const features: Feature<Point>[] = [];
-  events.forEach((ev) => {
-    const locations = ev.affectedLocations as string[];
-    locations.forEach((loc) => {
-      const coord = getPortCoordinates(loc) ?? DISRUPTION_COORDS[loc];
-      if (!coord) return;
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: coord },
-        properties: {
-          id: ev.id,
-          title: ev.title,
-          description: ev.description,
-          category: ev.category,
-          severity: ev.severity,
-          color: getSeverityColor(ev.severity),
-          radius: ev.severity === "Critical" ? 14 : ev.severity === "High" ? 10 : 7,
-        },
-      });
-    });
-  });
-  return { type: "FeatureCollection", features };
-}
-
 function popupHTML(props: Record<string, string>) {
-  const color = getSeverityColor(props.severity);
+  const color = getMapSeverityColor(props.severity);
   return `
     <div style="
       background: #0d1a2a;
@@ -175,7 +75,7 @@ function initLayers(map: maplibregl.Map) {
     id: LAYER.baseLines,
     type: "line",
     source: SRC.baseRoutes,
-    paint: { "line-color": "#1e4a7a", "line-opacity": 0.4, "line-width": 1.5 },
+    paint: { "line-color": "#426d96", "line-opacity": 0.7, "line-width": 1.5, "line-dasharray": [3, 2] },
   });
 
   map.addLayer({
@@ -186,6 +86,7 @@ function initLayers(map: maplibregl.Map) {
       "line-color": ["get", "color"],
       "line-opacity": 0.85,
       "line-width": 3,
+      "line-dasharray": [3, 2],
     },
   });
 
@@ -250,6 +151,11 @@ export default function MapView() {
   const { data: history } = trpc.routes.history.useQuery({ limit: 5 });
 
   const isLoading = disruptionsLoading || routesLoading;
+  const baseRouteData = useMemo(() => buildBaseRouteGeoJSON(routes ?? []), [routes]);
+  const evaluationData = useMemo(() => buildEvalRouteGeoJSON(history ?? []), [history]);
+  const disruptionData = useMemo(() => buildDisruptionGeoJSON(disruptions ?? []), [disruptions]);
+  const omittedConnections = (routes?.length ?? 0) - baseRouteData.features.length
+    + (history?.length ?? 0) - evaluationData.features.length;
 
   // Push updated GeoJSON into sources whenever data or visibility changes
   const syncLayers = useCallback(() => {
@@ -257,10 +163,10 @@ export default function MapView() {
     if (!map || !layersInitRef.current) return;
 
     const empty: FeatureCollection = { type: "FeatureCollection", features: [] };
-    setSourceData(map, SRC.baseRoutes, showRoutes && routes ? buildBaseRouteGeoJSON(routes) : empty);
-    setSourceData(map, SRC.evalRoutes, showRoutes && history ? buildEvalRouteGeoJSON(history) : empty);
-    setSourceData(map, SRC.disruptions, showDisruptions && disruptions ? buildDisruptionGeoJSON(disruptions) : empty);
-  }, [routes, history, disruptions, showRoutes, showDisruptions]);
+    setSourceData(map, SRC.baseRoutes, showRoutes ? baseRouteData : empty);
+    setSourceData(map, SRC.evalRoutes, showRoutes ? evaluationData : empty);
+    setSourceData(map, SRC.disruptions, showDisruptions ? disruptionData : empty);
+  }, [baseRouteData, evaluationData, disruptionData, showRoutes, showDisruptions]);
 
   useEffect(() => { syncLayers(); }, [syncLayers]);
 
@@ -330,7 +236,7 @@ export default function MapView() {
       {isLoading && mapReady && (
         <div className="absolute top-4 left-16 cyber-card px-3 py-2 z-10 flex items-center gap-2">
           <Loader2 className="w-3 h-3 text-primary animate-spin" />
-          <span className="text-xs font-mono text-primary">ATHENA SCANNING...</span>
+          <span className="text-xs font-mono text-primary">LOADING MAP DATA...</span>
         </div>
       )}
 
@@ -343,6 +249,7 @@ export default function MapView() {
           </div>
           <button
             onClick={handleToggleRoutes}
+            aria-pressed={showRoutes}
             className={cn(
               "flex items-center gap-2 text-xs font-mono w-full px-2 py-1.5 rounded-sm transition-all",
               showRoutes
@@ -351,10 +258,11 @@ export default function MapView() {
             )}
           >
             {showRoutes ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Shipping Routes
+            Route connections
           </button>
           <button
             onClick={handleToggleDisruptions}
+            aria-pressed={showDisruptions}
             className={cn(
               "flex items-center gap-2 text-xs font-mono w-full px-2 py-1.5 rounded-sm transition-all",
               showDisruptions
@@ -398,20 +306,24 @@ export default function MapView() {
         </div>
       </div>
 
-      {/* Alert count */}
-      {disruptions && disruptions.length > 0 && (
-        <div className="absolute bottom-4 left-4 cyber-card px-4 py-2 flex items-center gap-2 z-10">
-          <AlertTriangle className="w-4 h-4 text-[oklch(0.65_0.25_25)] neon-pulse" />
-          <span className="text-sm font-mono">
-            <span className="text-[oklch(0.65_0.25_25)] font-bold">
-              {disruptions.filter(
-                (d) => d.severity === "Critical" || d.severity === "High"
-              ).length}
-            </span>
-            <span className="text-muted-foreground"> critical/high alerts active</span>
-          </span>
+      <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-sm flex flex-col gap-2 z-10">
+        <div className="cyber-card px-3 py-2 text-[11px] leading-relaxed" role="note" aria-label="Map connection accuracy">
+          <p className="font-mono font-bold text-foreground">Approximate connections</p>
+          <p className="text-muted-foreground">Dashed lines may cross land. Use maritime routing data to plan shipping lanes, canals, and safe passage.</p>
+          <p className="text-muted-foreground">Disruption markers show approximate matched areas.</p>
+          {omittedConnections > 0 && (
+            <p className="text-muted-foreground mt-1" role="status">{omittedConnections} {omittedConnections === 1 ? "connection omitted" : "connections omitted"}: coordinates unavailable or invalid.</p>
+          )}
         </div>
-      )}
+        {disruptions && disruptions.length > 0 && (
+          <div className="cyber-card px-3 py-2 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-[oklch(0.65_0.25_25)] shrink-0" />
+            <span className="text-xs font-mono text-muted-foreground">
+              {disruptions.filter(d => d.sourceKind === "live" && (d.severity === "Critical" || d.severity === "High")).length} live critical/high observations
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

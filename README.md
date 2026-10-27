@@ -15,7 +15,7 @@ Source provenance is part of the result: live reports, static baselines, unavail
 - **Analyze a route.** Use port names, catalog codes such as `CNSHA`, or a query such as `from Shanghai to Rotterdam`. Get an overall risk score, a factor breakdown, an intelligence summary, and a narrative assessment.
 - **Review alternatives.** Apollo suggests alternative routes when the model's risk score exceeds 50, with estimated transit time, risk, cost impact, and approximate waypoints.
 - **Inspect the evidence.** Disruption cards distinguish source observation time from the most recent source check and link to available supporting material.
-- **Explore the map.** View available shipping routes, recent evaluated connections, and geographically matched disruptions on a MapLibre basemap.
+- **Explore the map.** View approximate stored paths, recent evaluated connections, and geographically matched disruptions on a MapLibre basemap.
 - **Compare evaluations.** Review saved results, inspect route trends, and rerun an evaluation without overwriting its original record.
 
 ## Quickstart
@@ -175,6 +175,8 @@ Repeated scans use unique source fingerprints, atomic database transactions, and
 The client and server share a [port catalog](shared/ports.ts). Known names, aliases (such as Busan/Pusan), and catalog codes resolve to one canonical name. Adjacent ports and named terminals remain distinct. Port fields offer catalog suggestions, and two aliases for the same endpoint are rejected.
 
 You can analyze named ports outside the catalog, but RiskWise does not invent their coordinates or place them at `[0, 0]`. Their map connections are omitted. Catalog coordinates describe approximate port areas, not berths.
+
+Recent evaluations use spherical connections between endpoints. Paths are split at the date line, so Pacific connections do not draw across the opposite side of the world. Stored paths are validated before rendering; unavailable or invalid connections are counted on the map. Dashed lines can cross land: use maritime routing data for navigable shipping lanes, canals, depth, and passage restrictions.
 
 ## Configuration
 

@@ -9,6 +9,7 @@
 
 import { invokeLLM, type LLMConfig } from "./_core/llm";
 import { athenaResultSchema, hermesResultSchema, apolloResultSchema, parseAgentResult } from "./agentResults";
+import { getPortCoordinates } from "@shared/ports";
 import { ENV } from "./_core/env";
 import { createLogger, logAgentTelemetry, logAthenaScan, logRouteEvaluation } from "./_core/logger";
 import { fetchAllRealTimeIntelligence, type LiveRiskEvent, type DataFetchSummary } from "./realtime";
@@ -505,35 +506,21 @@ export async function runAthenaScan(): Promise<DataFetchSummary> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const PORT_COORDS: Record<string, [number, number]> = {
-  "port of shanghai": [121.8, 30.6],
-  "port of rotterdam": [4.5, 51.9],
-  "port of singapore": [103.8, 1.3],
-  "port of los angeles": [-118.2, 33.7],
-  "port of long beach": [-118.2, 33.7],
-  "port of shenzhen": [114.0, 22.5],
-  "port of hong kong": [114.2, 22.3],
-  "port of hamburg": [9.9, 53.5],
-  "port of new york": [-74.0, 40.7],
-  "port of dubai": [55.3, 25.3],
-  "port of busan": [129.0, 35.1],
-  "port of kaohsiung": [120.3, 22.6],
-  "port of tokyo": [139.7, 35.6],
-  "port of mumbai": [72.8, 18.9],
-  "port of sydney": [151.2, -33.9],
-};
+function generateBaseWaypoints(
+  origin: string,
+  destination: string
+): [number, number][] {
+  const originCoords = getPortCoordinates(origin);
+  const destCoords = getPortCoordinates(destination);
+  if (!originCoords || !destCoords) return [];
 
-function generateBaseWaypoints(origin: string, destination: string): [number, number][] {
-  const originCoords = PORT_COORDS[origin.toLowerCase()] ?? [0, 0];
-  const destCoords = PORT_COORDS[destination.toLowerCase()] ?? [0, 0];
-
-  // Generate 8 interpolated points
   const points: [number, number][] = [];
   for (let i = 0; i <= 7; i++) {
     const t = i / 7;
-    const lng = originCoords[0] + (destCoords[0] - originCoords[0]) * t;
-    const lat = originCoords[1] + (destCoords[1] - originCoords[1]) * t;
-    points.push([lng, lat]);
+    points.push([
+      originCoords[0] + (destCoords[0] - originCoords[0]) * t,
+      originCoords[1] + (destCoords[1] - originCoords[1]) * t,
+    ]);
   }
   return points;
 }

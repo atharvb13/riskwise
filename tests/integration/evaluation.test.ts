@@ -217,6 +217,30 @@ describe("evaluation HTTP/database workflow", () => {
     expect(fetchAllRealTimeIntelligence).toHaveBeenCalledTimes(1);
   });
 
+  it("canonicalizes aliases over HTTP and rejects identical port identities before model work", async () => {
+    await expect(
+      client.routes.evaluate.mutate({ origin: "Busan", destination: "Pusan" })
+    ).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+    expect(calls).toHaveLength(0);
+    expect(await client.routes.history.query()).toEqual([]);
+    const result = await client.routes.evaluate.mutate({
+      origin: "CN SHA",
+      destination: "NLRTM",
+    });
+    expect(result.baseRouteWaypoints[0]).toEqual([121.8, 30.6]);
+    expect(result.baseRouteWaypoints.at(-1)).toEqual([4.5, 51.9]);
+    const [row] = await client.routes.history.query();
+    expect(row).toMatchObject({
+      originPort: "Port of Shanghai",
+      destinationPort: "Port of Rotterdam",
+    });
+    expect(
+      calls[0].messages.some(message =>
+        message.content.includes("Port of Shanghai")
+      )
+    ).toBe(true);
+  });
+
   it("persists critical scores and Apollo alternatives as JSON", async () => {
     score = 85;
     const result = await client.routes.evaluate.mutate({

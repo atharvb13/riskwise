@@ -52,3 +52,9 @@ The owner requested three commits for this session:
 3. **Evidence presentation:** disruption cards show provenance, source observation time, last source check, and evidence links. Static context is not counted as live critical incidents. Analysis and history distinguish live, baseline, unavailable, and unknown historical sources; history labels the evaluation-time snapshot. Map popup text is escaped before HTML rendering.
 
 Validation: 81 unit tests, 15 PostgreSQL integration tests, TypeScript, and the production build passed. The migration was applied in the development instance and its sourced-event API responded successfully. Chromium checks with controlled API data covered baseline-only and mixed views, unavailable and historical provenance, safe links and escaped popup text, dated history, and mobile layout without horizontal overflow or uncaught browser errors. Hosted CI and real-model evaluation remain separate checks; no deployment was performed.
+
+## Day 4 delivery
+
+1. **Shared port identities:** consolidated port names, exact aliases, catalog codes, and approximate coordinates into one client/server catalog. Known inputs are canonicalized before analysis and persistence; same-port aliases are rejected. Port fields offer suggestions. Adjacent ports and named terminals retain separate identities. Unknown ports remain analyzable as text, with map coordinates explicitly unavailable instead of a fabricated `[0, 0]` location.
+
+First-commit validation: 98 unit tests, 16 PostgreSQL integration tests, and TypeScript passed. Coverage includes alias normalization, duplicate-endpoint rejection before model work, canonical names persisted over HTTP, and unavailable coordinates for unknown ports. Date-line rendering and approximate-connection labelling follow in the second commit.

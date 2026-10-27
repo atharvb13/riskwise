@@ -24,7 +24,9 @@ import type { TrpcContext } from "./_core/context";
 const intelligence = {
   events: [],
   fetchedAt: "2026-10-21T00:00:00.000Z",
-  sources: [{ name: "Test feed", count: 0, ok: true, sourceKind: "live" as const }],
+  sources: [
+    { name: "Test feed", count: 0, ok: true, sourceKind: "live" as const },
+  ],
 };
 const athena = {
   relevantDisruptions: [],
@@ -69,6 +71,8 @@ describe("validated agent results", () => {
   it.each([
     { origin: "   ", destination: "Rotterdam" },
     { origin: "Shanghai", destination: "PORT OF SHANGHAI" },
+    { origin: "Busan", destination: "Pusan" },
+    { origin: "CNSHA", destination: "CN SHA" },
     { origin: "x".repeat(101), destination: "Rotterdam" },
   ])(
     "rejects invalid route inputs before database or model work: %j",
@@ -84,6 +88,29 @@ describe("validated agent results", () => {
       expect(fetchAllRealTimeIntelligence).not.toHaveBeenCalled();
       expect(invokeLLM).not.toHaveBeenCalled();
       expect(insertRouteEvaluation).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ["Shanghai", "NLRTM", [121.8, 30.6], [4.5, 51.9]],
+    ["Unknown Harbor", "Rotterdam", null, null],
+  ])(
+    "uses catalog coordinates or no connection for %s to %s",
+    async (origin, destination, first, last) => {
+      vi.mocked(invokeLLM)
+        .mockResolvedValueOnce(completion(athena))
+        .mockResolvedValueOnce(completion(hermes));
+      const result = await orchestrate(
+        origin as string,
+        destination as string,
+        []
+      );
+      if (first) {
+        expect(result.baseRouteWaypoints[0]).toEqual(first);
+        expect(result.baseRouteWaypoints.at(-1)).toEqual(last);
+      } else {
+        expect(result.baseRouteWaypoints).toEqual([]);
+      }
     }
   );
 
@@ -103,7 +130,9 @@ describe("validated agent results", () => {
   });
 
   it("propagates a collection failure without inventing a news event", async () => {
-    vi.mocked(fetchAllRealTimeIntelligence).mockRejectedValue(new Error("Collection failed"));
+    vi.mocked(fetchAllRealTimeIntelligence).mockRejectedValue(
+      new Error("Collection failed")
+    );
     await expect(runAthenaScan()).rejects.toThrow("Collection failed");
     expect(invokeLLM).not.toHaveBeenCalled();
   });

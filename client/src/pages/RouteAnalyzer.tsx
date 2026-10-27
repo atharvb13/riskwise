@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
+import { PORTS } from "@shared/ports";
 import { parseRouteQuery, resolveRouteInput } from "@shared/routeInput";
 import {
   getRiskTextClass,
@@ -242,6 +243,7 @@ export default function RouteAnalyzer() {
               <input
                 type="text"
                 id="origin-port"
+                list="known-ports"
                 maxLength={100}
                 disabled={isRunning}
                 value={origin}
@@ -255,6 +257,7 @@ export default function RouteAnalyzer() {
               <input
                 type="text"
                 id="destination-port"
+                list="known-ports"
                 maxLength={100}
                 disabled={isRunning}
                 value={destination}
@@ -265,7 +268,10 @@ export default function RouteAnalyzer() {
             </div>
           </div>
 
-          <p id="route-input-help" className="text-[11px] text-muted-foreground">Enter both ports, or use a “from … to …” query.</p>
+          <datalist id="known-ports">
+            {PORTS.map(port => <option key={port.id} value={port.name}>{port.aliases[0]} · {port.id}</option>)}
+          </datalist>
+          <p id="route-input-help" className="text-[11px] text-muted-foreground">Enter port names or codes (such as CNSHA), or use a “from … to …” query. Ports outside the catalog can be analyzed but cannot be placed on the map.</p>
           <button
             type="submit"
             disabled={isRunning}

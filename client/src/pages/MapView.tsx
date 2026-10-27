@@ -5,6 +5,7 @@ import { MapView as LibreMap } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
 import { getRiskColor, getSeverityColor, getCategoryIcon } from "@/lib/riskUtils";
 import { AlertTriangle, Layers, Eye, EyeOff, RefreshCw, Loader2 } from "lucide-react";
+import { getPortCoordinates } from "@shared/ports";
 import { escapeEvidenceHtml } from "@shared/intelligence";
 import { cn } from "@/lib/utils";
 
@@ -13,60 +14,21 @@ import { cn } from "@/lib/utils";
 const DISRUPTION_COORDS: Record<string, [number, number]> = {
   "Suez Canal": [32.3, 30.5],
   "Red Sea": [38.0, 20.0],
-  "Port of Shanghai": [121.8, 30.6],
   "South China Sea": [115.0, 15.0],
-  "Port of Rotterdam": [4.5, 51.9],
   "Panama Canal": [-79.5, 9.0],
   "Taiwan Strait": [119.5, 24.0],
-  "Port of Los Angeles": [-118.2, 33.7],
-  "Port of Long Beach": [-118.2, 33.7],
   "Singapore Strait": [104.0, 1.2],
-  "Port of Hamburg": [9.9, 53.5],
   "Strait of Hormuz": [56.5, 26.5],
-  "Port of Busan": [129.0, 35.1],
   "North Atlantic Ocean": [-35.0, 45.0],
   "Malacca Strait": [101.0, 3.0],
-  "Port of Singapore": [103.8, 1.3],
   "Persian Gulf": [52.0, 26.0],
-  "Port of Dubai": [55.3, 25.3],
-  "Port of Aden": [45.0, 12.8],
   "Bab-el-Mandeb Strait": [43.5, 12.5],
-  "Yangshan Deep Water Port": [122.1, 30.6],
   "East China Sea": [125.0, 28.0],
-  "Port of Hong Kong": [114.2, 22.3],
-  "Port of Manila": [120.9, 14.6],
-  "Port of Kaohsiung": [120.3, 22.6],
-  "Europoort": [4.1, 51.9],
   "Gulf of Panama": [-79.0, 8.5],
   "Caribbean Sea": [-75.0, 15.0],
   "North Sea": [3.0, 56.0],
-  "Port of Fujairah": [56.3, 25.1],
   "Korea Strait": [129.0, 34.5],
   "Yellow Sea": [123.0, 35.0],
-};
-
-export const PORT_COORDS: Record<string, [number, number]> = {
-  "port of shanghai": [121.8, 30.6],
-  "port of rotterdam": [4.5, 51.9],
-  "port of singapore": [103.8, 1.3],
-  "port of los angeles": [-118.2, 33.7],
-  "port of long beach": [-118.2, 33.7],
-  "port of shenzhen": [114.0, 22.5],
-  "port of hong kong": [114.2, 22.3],
-  "port of hamburg": [9.9, 53.5],
-  "port of new york": [-74.0, 40.7],
-  "port of dubai": [55.3, 25.3],
-  "port of busan": [129.0, 35.1],
-  "shenzhen": [114.0, 22.5],
-  "shanghai": [121.8, 30.6],
-  "rotterdam": [4.5, 51.9],
-  "singapore": [103.8, 1.3],
-  "hamburg": [9.9, 53.5],
-  "dubai": [55.3, 25.3],
-  "busan": [129.0, 35.1],
-  "new york": [-74.0, 40.7],
-  "long beach": [-118.2, 33.7],
-  "los angeles": [-118.2, 33.7],
 };
 
 // ── Source/layer IDs ─────────────────────────────────────────────────────────
@@ -126,8 +88,8 @@ function buildEvalRouteGeoJSON(history: EvalRecord[]): FeatureCollection<LineStr
   return {
     type: "FeatureCollection",
     features: history.flatMap((ev) => {
-      const origin = PORT_COORDS[ev.originPort.toLowerCase()];
-      const dest = PORT_COORDS[ev.destinationPort.toLowerCase()];
+      const origin = getPortCoordinates(ev.originPort);
+      const dest = getPortCoordinates(ev.destinationPort);
       if (!origin || !dest) return [];
       const f: Feature<LineString> = {
         type: "Feature",
@@ -144,7 +106,7 @@ function buildDisruptionGeoJSON(events: RiskEvent[]): FeatureCollection<Point> {
   events.forEach((ev) => {
     const locations = ev.affectedLocations as string[];
     locations.forEach((loc) => {
-      const coord = DISRUPTION_COORDS[loc];
+      const coord = getPortCoordinates(loc) ?? DISRUPTION_COORDS[loc];
       if (!coord) return;
       features.push({
         type: "Feature",

@@ -50,7 +50,7 @@ describe("route queries", () => {
       })
     ).toMatchObject({
       success: true,
-      data: { origin: "Hamburg", destination: "Rotterdam" },
+      data: { origin: "Port of Hamburg", destination: "Port of Rotterdam" },
     });
   });
 
@@ -63,7 +63,7 @@ describe("route queries", () => {
       })
     ).toMatchObject({
       success: true,
-      data: { origin: "Shanghai", destination: "Hamburg" },
+      data: { origin: "Port of Shanghai", destination: "Port of Hamburg" },
     });
   });
 
@@ -76,7 +76,7 @@ describe("route queries", () => {
       })
     ).toMatchObject({
       success: true,
-      data: { origin: "Port of Shanghai", destination: "Rotterdam" },
+      data: { origin: "Port of Shanghai", destination: "Port of Rotterdam" },
     });
   });
 
@@ -103,6 +103,9 @@ describe("route queries", () => {
       queryText: "x".repeat(2001),
     },
     { origin: "  PORT OF Shanghai ", destination: "shanghai" },
+    { origin: "Busan", destination: "Pusan" },
+    { origin: "USNYC", destination: "New York" },
+    { origin: "CNSHA", destination: "CN SHA" },
   ])("also rejects invalid direct API inputs: %j", input => {
     expect(routeEvaluationInputSchema.safeParse(input).success).toBe(false);
   });

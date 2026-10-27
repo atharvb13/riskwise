@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { findPort, portIdentity } from "./ports";
 
 const portName = z
   .string()
@@ -9,10 +10,8 @@ const portName = z
       .string()
       .min(2, "Port names must contain at least 2 characters.")
       .max(100, "Port names must be 100 characters or fewer.")
-  );
-
-const portIdentity = (name: string) =>
-  name.toLowerCase().replace(/^port\s+(?:of\s+)?/, "");
+  )
+  .transform(name => findPort(name)?.name ?? name);
 
 export const routeEvaluationInputSchema = z
   .object({

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
+import { Link } from "wouter";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState, LoadingState } from "@/components/PageState";
 import { QueryError } from "@/components/QueryError";
 import {
   getRiskTextClass,
@@ -32,7 +35,7 @@ function RouteTrendSparkline({ originPort, destinationPort }: { originPort: stri
   if (isLoading) {
     return (
       <div className="h-16 flex items-center justify-center">
-        <div className="text-[10px] font-mono text-muted-foreground/40">Loading trend...</div>
+        <div className="text-[10px] font-mono text-muted-foreground">Loading trend...</div>
       </div>
     );
   }
@@ -40,7 +43,7 @@ function RouteTrendSparkline({ originPort, destinationPort }: { originPort: stri
   if (!trend || trend.length < 2) {
     return (
       <div className="h-16 flex items-center justify-center">
-        <div className="text-[10px] font-mono text-muted-foreground/40">Not enough data for trend (need 2+ evaluations)</div>
+        <div className="text-[10px] font-mono text-muted-foreground">Not enough data for trend (need 2+ evaluations)</div>
       </div>
     );
   }
@@ -68,7 +71,7 @@ function RouteTrendSparkline({ originPort, destinationPort }: { originPort: stri
         <div className="flex items-center gap-1.5">
           <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Risk Trend</span>
-          <span className="text-[9px] font-mono text-muted-foreground/50">{trend.length} evaluations</span>
+          <span className="text-[9px] font-mono text-muted-foreground">{trend.length} evaluations</span>
         </div>
         <div className="flex items-center gap-1" style={{ color: trendColor }}>
           <TrendIcon className="w-3 h-3" />
@@ -137,33 +140,21 @@ export default function RouteHistory() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-border shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <History className="w-5 h-5 text-primary" />
-          <div>
-            <h2 className="font-display text-base font-bold text-foreground tracking-wider">ROUTE HISTORY</h2>
-            <p className="text-[11px] font-mono text-muted-foreground">
-              {history ? `${history.length} past evaluations` : isError ? "History unavailable" : "Loading history…"}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => refetch()}
-          aria-label="Refresh route history"
-          disabled={isFetching}
-          className="p-2 rounded-sm border border-border text-muted-foreground hover:text-foreground hover:border-border/80 transition-all"
-        >
-          <RefreshCw className="w-4 h-4" />
+    <div className="min-h-full">
+      <PageHeader title="Route history" icon={History} description={<>
+        <p>Review saved assessments and rerun a route with current inputs.</p>
+        <p className="mt-1 text-xs">{history ? `${history.length} recent evaluations shown` : isError ? "History unavailable" : "Loading history…"}</p>
+      </>}>
+        <button type="button" onClick={() => { void refetch(); }} aria-label="Refresh route history" disabled={isFetching} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border text-muted-foreground hover:text-foreground disabled:opacity-50">
+          <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} aria-hidden="true" />
         </button>
-      </div>
+      </PageHeader>
 
       {/* Summary stats */}
       {history && history.length > 0 && (
         <div className="px-6 py-4 border-b border-border shrink-0 grid grid-cols-3 gap-4">
           <div>
-            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Total Evaluations</div>
+            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Evaluations shown</div>
             <div className="text-xl font-display font-bold text-primary">{history.length}</div>
           </div>
           <div>
@@ -173,7 +164,7 @@ export default function RouteHistory() {
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Critical Routes</div>
+            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Critical assessments</div>
             <div className="text-xl font-display font-bold text-[oklch(0.60_0.28_15)]">
               {history.filter((h) => h.overallRiskScore > 75).length}
             </div>
@@ -182,36 +173,13 @@ export default function RouteHistory() {
       )}
 
       {/* History list */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-2 min-h-0">
+      <div className="space-y-3 p-4 sm:p-6">
         {isError && <QueryError title="Could not load route history" onRetry={() => { void refetch(); }} isRetrying={isFetching} hasCachedData={Boolean(history)} />}
-        {isLoading && (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="cyber-card p-5 animate-pulse">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-10 h-10 rounded bg-secondary shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-3.5 bg-secondary rounded w-1/2" />
-                      <div className="h-2.5 bg-secondary rounded w-1/3" />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="h-6 bg-secondary rounded w-16" />
-                    <div className="h-6 bg-secondary rounded w-14" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
+        {isLoading && <LoadingState label="Loading saved evaluations…" />}
         {!isLoading && !isError && (!history || history.length === 0) && (
-          <div className="flex flex-col items-center justify-center h-32 gap-2">
-            <History className="w-8 h-8 text-muted-foreground/30" />
-            <p className="text-sm font-mono text-muted-foreground">No evaluations yet.</p>
-            <p className="text-xs font-mono text-muted-foreground/60">Run a route analysis to see history here.</p>
-          </div>
+          <EmptyState title="No evaluations yet" description="Analyze your first route to build a history of risk scores, supporting evidence, and alternatives.">
+            <Link href="/analyze" className="inline-flex min-h-11 items-center rounded-sm border border-primary/40 px-4 text-sm text-primary hover:bg-primary/10">Analyze a route</Link>
+          </EmptyState>
         )}
 
         {history?.map((evaluation) => {
@@ -275,7 +243,7 @@ export default function RouteHistory() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right text-[10px] font-mono text-muted-foreground/60 hidden sm:block">
+                  <div className="text-right text-[10px] font-mono text-muted-foreground hidden sm:block">
                     <div>{new Date(evaluation.evaluatedAt).toLocaleDateString()}</div>
                     <div>{new Date(evaluation.evaluatedAt).toLocaleTimeString()}</div>
                   </div>
@@ -389,7 +357,7 @@ export default function RouteHistory() {
 
                   {/* Query text */}
                   {evaluation.queryText && (
-                    <div className="text-[10px] font-mono text-muted-foreground/60 italic">
+                    <div className="text-[10px] font-mono text-muted-foreground italic">
                       Query: "{evaluation.queryText}"
                     </div>
                   )}

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { EmptyState, LoadingState } from "@/components/PageState";
 import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
 import { PORTS } from "@shared/ports";
@@ -152,13 +153,13 @@ export default function RouteAnalyzer() {
   };
 
   return (
-    <div className="h-full flex flex-col lg:flex-row gap-0 overflow-hidden">
+    <div className="min-h-full flex flex-col lg:h-full lg:flex-row lg:overflow-hidden">
       {/* Left panel: Terminal + Input */}
-      <div className="flex flex-col w-full lg:w-[480px] lg:min-w-[480px] border-r border-border overflow-hidden">
+      <div className="flex w-full flex-col border-b border-border lg:w-[42%] lg:min-w-[340px] lg:max-w-[480px] lg:shrink-0 lg:border-r lg:border-b-0 lg:overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center gap-2 shrink-0">
           <Terminal className="w-4 h-4 text-primary" />
-          <span className="font-display text-sm font-bold text-primary tracking-wider">QUERY TERMINAL</span>
+          <h1 className="text-xl font-semibold text-foreground">Route analysis</h1>
           <div className="ml-auto flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-[oklch(0.65_0.25_25)]" />
             <div className="w-2 h-2 rounded-full bg-[oklch(0.80_0.20_75)]" />
@@ -172,22 +173,22 @@ export default function RouteAnalyzer() {
           role="log"
           aria-live="polite"
           aria-label="Evaluation activity"
-          className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1.5 bg-[oklch(0.06_0.01_240)] min-h-0"
+          className="max-h-64 overflow-y-auto p-4 font-mono text-xs space-y-2 bg-[oklch(0.06_0.01_240)] lg:max-h-none lg:flex-1 min-h-0"
         >
           {agentLog.length === 0 && (
-            <div className="space-y-2 text-muted-foreground/60">
+            <div className="space-y-2 text-muted-foreground">
               <div className="text-primary/60">▸ RiskWise Route Analysis</div>
               <div>▸ Research · Risk scoring · Route alternatives</div>
               <div>▸ Enter a query or fill in the port fields below</div>
-              <div className="mt-4 text-[10px] text-muted-foreground/40">
+              <div className="mt-4 text-[10px] text-muted-foreground">
                 ─────────────────────────────────────
               </div>
-              <div className="mt-3 text-[11px] text-muted-foreground/50">Example queries:</div>
+              <div className="mt-3 text-[11px] text-muted-foreground">Example queries:</div>
               {EXAMPLE_QUERIES.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => handleExampleQuery(q)}
-                  className="block text-left text-[10px] text-primary/50 hover:text-primary transition-colors cursor-pointer"
+                  className="block text-left text-xs text-primary hover:text-primary transition-colors cursor-pointer"
                 >
                   ▸ {q}
                 </button>
@@ -232,7 +233,7 @@ export default function RouteAnalyzer() {
               maxLength={2000}
               disabled={isRunning}
               placeholder="Natural language query (optional)..."
-              className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm pl-7 pr-4 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+              className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm pl-7 pr-4 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
             />
           </div>
 
@@ -249,7 +250,7 @@ export default function RouteAnalyzer() {
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="Port of Shanghai"
-                className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-colors"
+                className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
               />
             </div>
             <div>
@@ -263,7 +264,7 @@ export default function RouteAnalyzer() {
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="Port of Rotterdam"
-                className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-colors"
+                className="w-full bg-[oklch(0.06_0.01_240)] border border-border rounded-sm px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors"
               />
             </div>
           </div>
@@ -298,14 +299,8 @@ export default function RouteAnalyzer() {
       </div>
 
       {/* Right panel: Results */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
-        {isRunning && (
-          <div role="status" className="cyber-card p-6 space-y-3">
-            <Cpu className="h-6 w-6 animate-pulse text-primary" aria-hidden="true" />
-            <h2 className="font-display text-lg text-foreground">Analyzing your route</h2>
-            <p className="text-sm text-muted-foreground">Gathering intelligence and calculating risk. This can take a few minutes. Results will appear here when ready.</p>
-          </div>
-        )}
+      <div className="flex-1 space-y-4 p-4 sm:p-6 lg:overflow-y-auto min-h-0">
+        {isRunning && <LoadingState label="Analyzing your route. This can take a few minutes…" />}
         {evaluationError && !isRunning && (
           <div role="alert" className="cyber-card border border-destructive/40 p-5 space-y-3">
             <h2 className="font-display text-base text-foreground">Evaluation could not be completed</h2>
@@ -316,17 +311,16 @@ export default function RouteAnalyzer() {
           </div>
         )}
         {!result && !isRunning && !evaluationError && (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center space-y-3">
-              <Route className="w-12 h-12 text-primary/20 mx-auto" />
-              <p className="text-muted-foreground font-mono text-sm">No evaluation results yet.</p>
-              <p className="text-muted-foreground/60 font-mono text-xs">Enter a route query to begin analysis.</p>
-            </div>
-          </div>
+          <EmptyState title="Your route assessment starts here" description="Enter an origin and destination, or choose an example query. Review the model's risk estimate alongside its source evidence." />
         )}
 
         {result && (
           <>
+            <header className="space-y-1">
+              <h2 className="text-lg font-semibold text-foreground">Analysis results</h2>
+              <p className="text-sm text-muted-foreground break-words">{evalledOrigin} → {evalledDestination}</p>
+              <p className="text-xs text-muted-foreground">Model estimates; review source evidence before making shipping decisions.</p>
+            </header>
             {/* Risk Score Card */}
             <div className={cn("cyber-card p-5 border", getRiskBorderClass(result.overallRiskScore), getRiskBgClass(result.overallRiskScore))}>
               <div className="flex items-start justify-between gap-4">
@@ -342,7 +336,7 @@ export default function RouteAnalyzer() {
                 </div>
 
                 {/* Risk ring */}
-                <div className="relative w-24 h-24 shrink-0">
+                <div className="relative w-24 h-24 shrink-0" aria-hidden="true">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.20 0.03 240)" strokeWidth="8" />
                     <circle
@@ -357,7 +351,7 @@ export default function RouteAnalyzer() {
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className={cn("text-lg font-display font-bold", getRiskTextClass(result.overallRiskScore))}>
-                      {result.overallRiskScore}%
+                      {result.overallRiskScore}
                     </span>
                   </div>
                 </div>
@@ -468,7 +462,7 @@ export default function RouteAnalyzer() {
                   <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
                     Apollo Alternative Routes ({result.alternativeRoutes.length})
                   </span>
-                  <span className="ml-auto text-[9px] font-mono text-muted-foreground/50 tracking-wider">
+                  <span className="ml-auto text-[9px] font-mono text-muted-foreground tracking-wider">
                     APOLLO ALTERNATIVES
                   </span>
                 </div>

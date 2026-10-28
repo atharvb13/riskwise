@@ -58,9 +58,9 @@ export default function RiskWiseLayout({ children }: RiskWiseLayoutProps) {
             <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full" />
           </div>
           <div>
-            <h1 className="font-display text-xl font-bold text-primary text-glow-cyan tracking-wider">
+            <p className="font-display text-xl font-bold text-primary text-glow-cyan tracking-wider">
               RISKWISE
-            </h1>
+            </p>
             <p className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase">
               Supply Chain Intel
             </p>

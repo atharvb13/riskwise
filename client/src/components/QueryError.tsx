@@ -23,7 +23,7 @@ export function QueryError({
         />
         <p className="font-mono text-sm font-semibold">{title}</p>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {hasCachedData ? "Showing the last loaded data. " : ""}
         Check your connection and try again.
       </p>
@@ -31,7 +31,7 @@ export function QueryError({
         type="button"
         onClick={onRetry}
         disabled={isRetrying}
-        className="inline-flex items-center gap-2 rounded-sm border border-primary/40 px-3 py-2 text-xs font-mono text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-primary/40 px-3 py-2 text-xs font-mono text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
       >
         <RefreshCw
           className={`h-3.5 w-3.5${isRetrying ? " animate-spin" : ""}`}

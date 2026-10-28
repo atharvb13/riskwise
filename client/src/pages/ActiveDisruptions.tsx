@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { EventEvidence } from "@/components/Evidence";
 import { PageHeader } from "@/components/PageHeader";
@@ -6,7 +6,7 @@ import { EmptyState, LoadingState } from "@/components/PageState";
 import { QueryError } from "@/components/QueryError";
 import { getSeverityTextClass, getSeverityColor, getCategoryIcon, getCategoryColor } from "@/lib/riskUtils";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Filter, RefreshCw, MapPin } from "lucide-react";
+import { AlertTriangle, RefreshCw, MapPin } from "lucide-react";
 
 type Category = "Weather" | "Strike" | "Geopolitical" | "Port Congestion";
 type Severity = "Low" | "Medium" | "High" | "Critical";
@@ -15,6 +15,7 @@ const CATEGORIES: Category[] = ["Weather", "Strike", "Geopolitical", "Port Conge
 const SEVERITIES: Severity[] = ["Low", "Medium", "High", "Critical"];
 
 export default function ActiveDisruptions() {
+  const allCategoriesRef = useRef<HTMLButtonElement>(null);
   const [filterCategory, setFilterCategory] = useState<Category | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<Severity | null>(null);
 
@@ -48,101 +49,30 @@ export default function ActiveDisruptions() {
           <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} aria-hidden="true" />
         </button>
       </PageHeader>
-      <div className="border-b border-border px-4 py-4 sm:px-6">
-        {/* Filters */}
-        <div className="mt-4 flex flex-wrap gap-3">
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Category:</span>
+      <div className="space-y-4 border-b border-border px-4 py-4 sm:px-6">
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-foreground">Category</legend>
+          <div className="flex flex-wrap gap-2">
+            <button ref={allCategoriesRef} type="button" aria-pressed={filterCategory === null} onClick={() => setFilterCategory(null)} className={cn("min-h-11 rounded-sm border px-3 text-sm", filterCategory === null ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>All</button>
+            {CATEGORIES.map(category => <button key={category} type="button" aria-pressed={filterCategory === category} onClick={() => setFilterCategory(filterCategory === category ? null : category)} className={cn("flex min-h-11 items-center gap-2 rounded-sm border px-3 text-sm", filterCategory === category ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}><span aria-hidden="true">{getCategoryIcon(category)}</span>{category}</button>)}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setFilterCategory(null)}
-              className={cn(
-                "px-2.5 py-1 text-[10px] font-mono rounded-sm border transition-all",
-                filterCategory === null
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-border/80"
-              )}
-            >
-              ALL
-            </button>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFilterCategory(filterCategory === cat ? null : cat)}
-                className={cn(
-                  "px-2.5 py-1 text-[10px] font-mono rounded-sm border transition-all flex items-center gap-1",
-                  filterCategory === cat
-                    ? "border-opacity-60 text-foreground"
-                    : "border-border text-muted-foreground hover:border-border/80"
-                )}
-                style={
-                  filterCategory === cat
-                    ? {
-                        borderColor: getCategoryColor(cat),
-                        background: `color-mix(in oklch, ${getCategoryColor(cat)} 12%, transparent)`,
-                        color: getCategoryColor(cat),
-                      }
-                    : {}
-                }
-              >
-                {getCategoryIcon(cat)} {cat}
-              </button>
-            ))}
+        </fieldset>
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-foreground">Severity</legend>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={filterSeverity === null} onClick={() => setFilterSeverity(null)} className={cn("min-h-11 rounded-sm border px-3 text-sm", filterSeverity === null ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>All</button>
+            {SEVERITIES.map(severity => <button key={severity} type="button" aria-pressed={filterSeverity === severity} onClick={() => setFilterSeverity(filterSeverity === severity ? null : severity)} className={cn("min-h-11 rounded-sm border px-3 text-sm", filterSeverity === severity ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>{severity}</button>)}
           </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Severity:</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setFilterSeverity(null)}
-              className={cn(
-                "px-2.5 py-1 text-[10px] font-mono rounded-sm border transition-all",
-                filterSeverity === null
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-border/80"
-              )}
-            >
-              ALL
-            </button>
-            {SEVERITIES.map((sev) => (
-              <button
-                key={sev}
-                onClick={() => setFilterSeverity(filterSeverity === sev ? null : sev)}
-                className={cn(
-                  "px-2.5 py-1 text-[10px] font-mono rounded-sm border transition-all",
-                  filterSeverity === sev
-                    ? "text-foreground"
-                    : "border-border text-muted-foreground hover:border-border/80"
-                )}
-                style={
-                  filterSeverity === sev
-                    ? {
-                        borderColor: getSeverityColor(sev),
-                        background: `color-mix(in oklch, ${getSeverityColor(sev)} 12%, transparent)`,
-                        color: getSeverityColor(sev),
-                      }
-                    : {}
-                }
-              >
-                {sev}
-              </button>
-            ))}
-          </div>
-        </div>
+        </fieldset>
       </div>
 
       {/* Events list */}
-      <div className="space-y-4 p-4 sm:p-6">
+      <section aria-label="Disruption records" aria-busy={isFetching} className="space-y-4 p-4 sm:p-6">
         {isError && <QueryError title="Could not load disruptions" onRetry={() => { void refetch(); }} isRetrying={isFetching} hasCachedData={Boolean(disruptions)} />}
         {isLoading && <LoadingState label="Loading disruption intelligence…" />}
         {!isLoading && !isError && (!disruptions || disruptions.length === 0) && (
           <EmptyState title="No matching intelligence" description={filterCategory || filterSeverity ? "Try a different category or severity, or clear your filters to see all available records." : "No records are currently available. Missing reports do not establish that a route is safe."}>
-            {(filterCategory || filterSeverity) && <button type="button" className="min-h-11 rounded-sm border border-primary/40 px-4 text-sm text-primary hover:bg-primary/10" onClick={() => { setFilterCategory(null); setFilterSeverity(null); }}>Clear filters</button>}
+            {(filterCategory || filterSeverity) && <button type="button" className="min-h-11 rounded-sm border border-primary/40 px-4 text-sm text-primary hover:bg-primary/10" onClick={() => { setFilterCategory(null); setFilterSeverity(null); allCategoriesRef.current?.focus(); }}>Clear filters</button>}
           </EmptyState>
         )}
 
@@ -153,7 +83,7 @@ export default function ActiveDisruptions() {
           const categoryColor = getCategoryColor(event.category);
 
           return (
-            <div
+            <article
               key={event.id}
               className="cyber-card p-5 transition-all hover:border-border/80"
               style={{
@@ -165,7 +95,7 @@ export default function ActiveDisruptions() {
                 <div className="flex items-start gap-2 min-w-0">
                   <span className="text-base shrink-0 mt-0.5">{getCategoryIcon(event.category)}</span>
                   <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-foreground leading-snug break-words">{event.title}</h3>
+                    <h2 className="text-base font-semibold text-foreground leading-snug break-words">{event.title}</h2>
                     <div className="flex items-center gap-2 mt-1">
                       <span
                         className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm"
@@ -200,10 +130,10 @@ export default function ActiveDisruptions() {
               </div>
 
               <EventEvidence event={event} />
-            </div>
+            </article>
           );
         })}
-      </div>
+      </section>
     </div>
   );
 }

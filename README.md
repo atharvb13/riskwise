@@ -178,6 +178,12 @@ You can analyze named ports outside the catalog, but RiskWise does not invent th
 
 Recent evaluations use spherical connections between endpoints. Paths are split at the date line, so Pacific connections do not draw across the opposite side of the world. Stored paths are validated before rendering; unavailable or invalid connections are counted on the map. Dashed lines can cross land: use maritime routing data for navigable shipping lanes, canals, depth, and passage restrictions.
 
+### Keyboard and small-screen use
+
+Use **Skip to content** to reach the current page. The mobile navigation menu contains keyboard focus while open; **Escape** closes it and returns focus to its trigger. Navigating to another page focuses the main content.
+
+In history, **Enter** or **Space** expands an assessment's details. The separate **Re-run** action saves a new assessment and shows persistent progress, completion, or retry feedback. Filters expose their selected state, and completed analyses focus the result heading. On small screens, results follow the route form in a single scrolling flow. Interface and trend-chart animations respect the system's reduced-motion preference.
+
 ## Configuration
 
 The server loads `.env` from the repository root. Environment variables already supplied to the process take precedence.

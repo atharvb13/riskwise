@@ -73,6 +73,8 @@ export default function RouteAnalyzer() {
   const runningRef = useRef(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const errorHeadingRef = useRef<HTMLHeadingElement>(null);
   const [, navigate] = useLocation();
 
   const [evalledOrigin, setEvalledOrigin] = useState("");
@@ -87,6 +89,12 @@ export default function RouteAnalyzer() {
     }
   }, [agentLog]);
 
+  useEffect(() => {
+    if (isRunning) return;
+    if (evaluationError) errorHeadingRef.current?.focus();
+    else if (result) resultsHeadingRef.current?.focus();
+  }, [isRunning, evaluationError, result]);
+
   const addLog = (agent: AgentMessage["agent"], message: string, status: AgentMessage["status"] = "working") => {
     setAgentLog((prev) => [...prev, { agent, message, status }]);
   };
@@ -95,6 +103,7 @@ export default function RouteAnalyzer() {
     if (runningRef.current) return;
     const resolved = resolveRouteInput({ origin, destination, queryText: query.trim() || undefined });
     if (!resolved.success) {
+      setResult(null);
       setEvaluationError(resolved.message);
       return;
     }
@@ -126,7 +135,7 @@ export default function RouteAnalyzer() {
       if (score > 75) {
         toast.error(`Critical risk: ${score}/100 — Review the analysis and alternatives.`, { duration: 6000 });
       } else if (score > 50) {
-        toast.warning(`High risk: ${score}/100 — Review alternatives.`, { duration: 4000 });
+        toast.warning(`Elevated risk: ${score}/100 — Review alternatives.`, { duration: 4000 });
       } else {
         toast.success(`Evaluation complete — Risk Score: ${score}/100`, { duration: 3000 });
       }
@@ -303,7 +312,7 @@ export default function RouteAnalyzer() {
         {isRunning && <LoadingState label="Analyzing your route. This can take a few minutes…" />}
         {evaluationError && !isRunning && (
           <div role="alert" className="cyber-card border border-destructive/40 p-5 space-y-3">
-            <h2 className="font-display text-base text-foreground">Evaluation could not be completed</h2>
+            <h2 ref={errorHeadingRef} tabIndex={-1} className="text-lg font-semibold text-foreground">Evaluation could not be completed</h2>
             <p className="text-sm text-muted-foreground">{evaluationError}</p>
             {evalledOrigin && evalledDestination && (
               <button type="button" onClick={() => void handleRun()} className="rounded-sm border border-primary/40 px-4 py-2 text-xs font-mono text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary">Retry evaluation</button>
@@ -317,7 +326,7 @@ export default function RouteAnalyzer() {
         {result && (
           <>
             <header className="space-y-1">
-              <h2 className="text-lg font-semibold text-foreground">Analysis results</h2>
+              <h2 ref={resultsHeadingRef} tabIndex={-1} className="text-lg font-semibold text-foreground">Analysis results</h2>
               <p className="text-sm text-muted-foreground break-words">{evalledOrigin} → {evalledDestination}</p>
               <p className="text-xs text-muted-foreground">Model estimates; review source evidence before making shipping decisions.</p>
             </header>
@@ -371,7 +380,7 @@ export default function RouteAnalyzer() {
               <div className="cyber-card p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-4 h-4 text-primary" />
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Base Transit</span>
+                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Estimated base transit</span>
                 </div>
                 <div className="text-3xl font-display font-bold text-primary">
                   {result.baseTransitDays}
@@ -379,7 +388,7 @@ export default function RouteAnalyzer() {
                 </div>
                 {result.alternativeRoutes.length > 0 && (
                   <div className="text-xs font-mono text-[oklch(0.80_0.20_75)] mt-1">
-                    +{result.alternativeRoutes[0].transitDays - result.baseTransitDays} days via alt. route
+                    {result.alternativeRoutes[0].transitDays > result.baseTransitDays ? "+" : ""}{result.alternativeRoutes[0].transitDays - result.baseTransitDays} days via first alternative
                   </div>
                 )}
               </div>
@@ -394,7 +403,7 @@ export default function RouteAnalyzer() {
                     <div className="text-sm font-mono text-[oklch(0.80_0.20_75)] font-bold">
                       {result.alternativeRoutes[0].costImpact}
                     </div>
-                    <div className="text-[10px] font-mono text-muted-foreground mt-1">for lowest-risk alt.</div>
+                    <div className="text-[10px] font-mono text-muted-foreground mt-1">for first alternative</div>
                   </>
                 ) : (
                   <div className="text-sm font-mono text-[oklch(0.75_0.20_145)]">No additional cost</div>
@@ -462,53 +471,21 @@ export default function RouteAnalyzer() {
                   <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
                     Apollo Alternative Routes ({result.alternativeRoutes.length})
                   </span>
-                  <span className="ml-auto text-[9px] font-mono text-muted-foreground tracking-wider">
-                    APOLLO ALTERNATIVES
-                  </span>
+
                 </div>
                 <div className="space-y-3">
                   {result.alternativeRoutes.map((alt, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        toast.info(`Route: ${alt.name} — Risk ${alt.riskScore}/100`, { duration: 3000 });
-                      }}
-                      className={cn(
-                        "w-full text-left p-3 rounded-sm border transition-all duration-200 group",
-                        getRiskBorderClass(alt.riskScore),
-                        "bg-secondary/30 hover:bg-secondary/60 active:scale-[0.99]"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="font-mono text-sm font-bold text-foreground">{alt.name}</div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className={cn("text-sm font-display font-bold", getRiskTextClass(alt.riskScore))}>
-                            {alt.riskScore}/100
-                          </div>
-                          <div
-                            className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{
-                              color: getRiskColor(alt.riskScore),
-                              background: `${getRiskColor(alt.riskScore)}18`,
-                              border: `1px solid ${getRiskColor(alt.riskScore)}40`,
-                            }}
-                          >
-                            VIEW DETAILS
-                          </div>
-                        </div>
+                    <article key={i} className={cn("rounded-sm border bg-secondary/30 p-4", getRiskBorderClass(alt.riskScore))}>
+                      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                        <h3 className="text-base font-semibold text-foreground">{alt.name}</h3>
+                        <p className={cn("text-sm font-semibold", getRiskTextClass(alt.riskScore))}>Risk estimate: {alt.riskScore}/100</p>
                       </div>
-                      <p className="text-xs text-muted-foreground font-mono mb-2">{alt.description}</p>
-                      <div className="flex gap-4 text-xs font-mono">
-                        <span className="text-muted-foreground">
-                          <Clock className="w-3 h-3 inline mr-1" />
-                          {alt.transitDays} days
-                        </span>
-                        <span className="text-[oklch(0.80_0.20_75)]">
-                          <DollarSign className="w-3 h-3 inline mr-1" />
-                          {alt.costImpact}
-                        </span>
-                      </div>
-                    </button>
+                      <p className="mb-3 text-sm leading-relaxed text-muted-foreground">{alt.description}</p>
+                      <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                        <div><dt className="text-xs text-muted-foreground">Estimated transit</dt><dd className="mt-1 text-foreground">{alt.transitDays} days</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Cost impact</dt><dd className="mt-1 text-foreground">{alt.costImpact}</dd></div>
+                      </dl>
+                    </article>
                   ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-border/50">

@@ -69,7 +69,7 @@ export function EventEvidence({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary"
+          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-primary"
         >
           {event.sourceKind === "baseline"
             ? "Baseline definition"

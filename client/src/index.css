@@ -215,3 +215,27 @@
     color: oklch(0.72 0.22 195) !important;
   }
 }
+
+/* Keep keyboard focus visible across custom controls and long scrollable panels. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+input, textarea, select {
+  font-size: max(1rem, 16px);
+}
+
+.maplibregl-ctrl-group button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

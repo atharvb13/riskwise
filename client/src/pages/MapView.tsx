@@ -213,6 +213,7 @@ export default function MapView() {
 
   return (
     <div className="relative h-full w-full">
+      <h1 className="sr-only">Maritime risk map</h1>
       <LibreMap
         onMapReady={handleMapReady}
         initialCenter={[20, 20]}
@@ -251,7 +252,7 @@ export default function MapView() {
             onClick={handleToggleRoutes}
             aria-pressed={showRoutes}
             className={cn(
-              "flex items-center gap-2 text-xs font-mono w-full px-2 py-1.5 rounded-sm transition-all",
+              "flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm transition-all",
               showRoutes
                 ? "text-[oklch(0.72_0.22_195)] bg-[oklch(0.72_0.22_195/0.1)] border border-[oklch(0.72_0.22_195/0.3)]"
                 : "text-muted-foreground border border-border"
@@ -264,7 +265,7 @@ export default function MapView() {
             onClick={handleToggleDisruptions}
             aria-pressed={showDisruptions}
             className={cn(
-              "flex items-center gap-2 text-xs font-mono w-full px-2 py-1.5 rounded-sm transition-all",
+              "flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm transition-all",
               showDisruptions
                 ? "text-[oklch(0.65_0.25_25)] bg-[oklch(0.65_0.25_25/0.1)] border border-[oklch(0.65_0.25_25/0.3)]"
                 : "text-muted-foreground border border-border"
@@ -275,7 +276,7 @@ export default function MapView() {
           </button>
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-2 text-xs font-mono w-full px-2 py-1.5 rounded-sm text-muted-foreground border border-border hover:text-foreground transition-all"
+            className="flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm text-muted-foreground border border-border hover:text-foreground transition-all"
           >
             <RefreshCw className="w-3 h-3" />
             Refresh

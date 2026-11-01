@@ -15,7 +15,7 @@ Source provenance is part of the result: live reports, static baselines, unavail
 - **Analyze a route.** Use port names, catalog codes such as `CNSHA`, or a query such as `from Shanghai to Rotterdam`. Get an overall risk score, a factor breakdown, an intelligence summary, and a narrative assessment.
 - **Review alternatives.** Apollo suggests alternative routes when the model's risk score exceeds 50, with estimated transit time, risk, cost impact, and approximate waypoints.
 - **Inspect the evidence.** Disruption cards distinguish source observation time from the most recent source check and link to available supporting material.
-- **Explore the map.** View approximate stored paths, recent evaluated connections, and geographically matched disruptions on a MapLibre basemap.
+- **Explore the map.** Open an assessment or an individual alternative from analysis/history, switch route options, fit the selected connection, and inspect sourced disruption evidence on a MapLibre basemap.
 - **Compare evaluations.** Review saved results, inspect route trends, and rerun an evaluation without overwriting its original record.
 
 ## Quickstart
@@ -177,6 +177,10 @@ The client and server share a [port catalog](shared/ports.ts). Known names, alia
 You can analyze named ports outside the catalog, but RiskWise does not invent their coordinates or place them at `[0, 0]`. Their map connections are omitted. Catalog coordinates describe approximate port areas, not berths.
 
 Recent evaluations use spherical connections between endpoints. Paths are split at the date line, so Pacific connections do not draw across the opposite side of the world. Stored paths are validated before rendering; unavailable or invalid connections are counted on the map. Dashed lines can cross land: use maritime routing data for navigable shipping lanes, canals, depth, and passage restrictions.
+
+Use **Show assessed route on map** or an alternative's **Show … on map** action to open it. The map keeps your selection while you move between pages in the current session; a full browser reload clears that selection, and saved assessments can be chosen again from recent history. Thicker lines emphasize the selected connection. Colored disruption markers represent live observation severity; static or unverified context uses neutral gray markers. Evidence includes source links, observation time, and the separate last source check.
+
+If the interactive map cannot initialize or its basemap cannot load, route options and evidence remain available in the controls panel. **Retry map** recreates the display while retaining your selection. Partial resource failures show a reload action; data-query failures have their own retry controls. **Refresh map data** fetches records and does not rerun a saved risk assessment; dated assessment snapshots remain labelled separately from current evidence.
 
 ### Keyboard and small-screen use
 

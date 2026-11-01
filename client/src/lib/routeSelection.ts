@@ -3,6 +3,7 @@ import {
   isCoordinate,
   routeGeometry,
 } from "@shared/geography";
+import { observedTimestamp } from "@shared/intelligence";
 import type { Coordinate } from "@shared/ports";
 
 export interface EvaluationMapInput {
@@ -12,6 +13,7 @@ export interface EvaluationMapInput {
   overallRiskScore: number;
   baseTransitDays: number;
   alternativeRoutes?: unknown;
+  evaluatedAt?: Date | string | null;
 }
 
 export interface MapRouteOption {
@@ -26,6 +28,7 @@ export interface MapRouteOption {
 
 export interface RouteSelection {
   evaluationId?: number;
+  evaluatedAt: string | null;
   originPort: string;
   destinationPort: string;
   options: MapRouteOption[];
@@ -89,6 +92,7 @@ export function makeRouteSelection(input: EvaluationMapInput): RouteSelection {
   }
   return {
     evaluationId: input.id,
+    evaluatedAt: observedTimestamp(input.evaluatedAt),
     originPort: input.originPort,
     destinationPort: input.destinationPort,
     options,

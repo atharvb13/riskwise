@@ -204,7 +204,11 @@
     border-bottom-color: oklch(0.20 0.03 240) !important;
   }
   .maplibregl-popup-close-button {
-    display: none !important;
+    display: block !important;
+    width: 44px;
+    height: 44px;
+    color: oklch(0.92 0.02 200);
+    font-size: 24px;
   }
   .maplibregl-ctrl-attrib {
     background: oklch(0.08 0.01 240 / 0.7) !important;

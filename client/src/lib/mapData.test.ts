@@ -80,4 +80,50 @@ describe("map data", () => {
       )
     ).toBe(true);
   });
+  it("keeps source metadata and observation/check times separate, with neutral static markers", () => {
+    const base = {
+      id: 1,
+      title: "Test",
+      description: "Test",
+      category: "Weather",
+      severity: "Critical",
+      affectedLocations: ["Shanghai"],
+      sourceProvider: "Test feed",
+      observedAt: "2026-10-30T05:00:00Z",
+      lastSeenAt: new Date("2026-10-31T06:00:00Z"),
+    };
+    const data = buildDisruptionGeoJSON([
+      {
+        ...base,
+        sourceKind: "live",
+        sourceUrl: "https://example.com/evidence",
+      },
+      {
+        ...base,
+        id: 2,
+        sourceKind: "baseline",
+        observedAt: null,
+        sourceUrl: "javascript:alert(1)",
+      },
+      { ...base, id: 3, sourceKind: "legacy" },
+    ]);
+    expect(data.features[0].properties).toMatchObject({
+      sourceKind: "live",
+      sourceProvider: "Test feed",
+      sourceUrl: "https://example.com/evidence",
+      observedAt: "2026-10-30T05:00:00.000Z",
+      lastSeenAt: "2026-10-31T06:00:00.000Z",
+    });
+    expect(data.features[1].properties).toMatchObject({
+      color: "#78909c",
+      observedAt: null,
+      sourceUrl: null,
+    });
+    expect(data.features[2].properties?.color).toBe(
+      data.features[1].properties?.color
+    );
+    expect(data.features[0].properties?.color).not.toBe(
+      data.features[1].properties?.color
+    );
+  });
 });

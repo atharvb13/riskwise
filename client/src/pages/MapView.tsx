@@ -1,20 +1,22 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { FeatureCollection, Point } from "geojson";
 import maplibregl from "maplibre-gl";
+import { createPortal } from "react-dom";
+import { EventEvidence } from "@/components/Evidence";
+import { QueryError } from "@/components/QueryError";
+import { sourceKindLabel } from "@shared/intelligence";
 import { Link } from "wouter";
 import { MapView as LibreMap } from "@/components/Map";
 import { useRouteMap } from "@/contexts/RouteMapContext";
 import { makeRouteSelection, routeBounds } from "@/lib/routeSelection";
 import { trpc } from "@/lib/trpc";
-import { getCategoryIcon } from "@/lib/riskUtils";
 import {
   buildBaseRouteGeoJSON,
   buildEvalRouteGeoJSON,
   buildSelectedRouteGeoJSON,
   buildDisruptionGeoJSON,
-  getMapSeverityColor,
+  type MapRiskEvent,
 } from "@/lib/mapData";
-import { escapeEvidenceHtml } from "@shared/intelligence";
 
 const SRC = {
   baseRoutes: "base-routes",
@@ -29,44 +31,6 @@ const LAYER = {
   disruptionZones: "disruption-zones",
   disruptionPoints: "disruption-points",
 } as const;
-
-function popupHTML(props: Record<string, string>) {
-  const color = getMapSeverityColor(props.severity);
-  return `
-    <div style="
-      background: #0d1a2a;
-      border: 1px solid ${color}55;
-      border-radius: 6px;
-      padding: 14px 16px;
-      max-width: 280px;
-      min-width: 220px;
-      font-family: 'Share Tech Mono', monospace;
-      color: #c8dce8;
-    ">
-      <div style="color:${color};font-size:10px;letter-spacing:2px;margin-bottom:6px;text-transform:uppercase;">
-        ${getCategoryIcon(props.category)} ${escapeEvidenceHtml(props.category)}
-      </div>
-      <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#e8f4f8;line-height:1.3;">
-        ${escapeEvidenceHtml(props.title)}
-      </div>
-      <div style="font-size:11px;color:#7a9ab0;line-height:1.6;margin-bottom:10px;">
-        ${escapeEvidenceHtml((props.description ?? "").slice(0, 130))}${(props.description ?? "").length > 130 ? "…" : ""}
-      </div>
-      <span style="
-        display:inline-block;
-        background:${color}22;
-        border:1px solid ${color}55;
-        border-radius:3px;
-        padding:2px 8px;
-        font-size:10px;
-        color:${color};
-        letter-spacing:1.5px;
-        text-transform:uppercase;
-      ">● SEVERITY: ${escapeEvidenceHtml(props.severity)}</span>
-    </div>`;
-}
-
-// ── Source/layer setup on first map load ─────────────────────────────────────
 
 function initLayers(map: maplibregl.Map) {
   const emptyFC = { type: "FeatureCollection" as const, features: [] };
@@ -153,6 +117,7 @@ function setSourceData(
   id: string,
   data: FeatureCollection
 ) {
+  if (!map.getStyle()) return;
   const src = map.getSource(id);
   if (src && src.type === "geojson") {
     (src as maplibregl.GeoJSONSource).setData(data);
@@ -165,6 +130,13 @@ export default function MapView() {
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showDisruptions, setShowDisruptions] = useState(true);
+  const [popup, setPopup] = useState<{
+    element: HTMLDivElement;
+    event: MapRiskEvent;
+  } | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+  const evidenceDetailsRef = useRef<HTMLDetailsElement>(null);
+  const disruptionsRef = useRef<MapRiskEvent[] | undefined>(undefined);
   const {
     selection,
     selectedOptionId,
@@ -178,6 +150,7 @@ export default function MapView() {
   const routesQuery = trpc.routes.allRoutes.useQuery();
   const historyQuery = trpc.routes.history.useQuery({ limit: 5 });
   const { data: disruptions } = eventsQuery;
+  disruptionsRef.current = disruptions;
   const { data: routes } = routesQuery;
   const { data: history } = historyQuery;
   const baseData = useMemo(() => buildBaseRouteGeoJSON(routes ?? []), [routes]);
@@ -206,24 +179,118 @@ export default function MapView() {
   const isRefreshing =
     eventsQuery.isFetching || routesQuery.isFetching || historyQuery.isFetching;
 
-  const handleMapReady = useCallback((map: maplibregl.Map) => {
-    mapRef.current = map;
-    initLayers(map);
-    setMapInstance(map);
-    map.on("click", LAYER.disruptionPoints, event => {
-      const feature = event.features?.[0];
-      if (!feature) return;
+  const showEvidencePopup = useCallback(
+    (
+      map: maplibregl.Map,
+      event: MapRiskEvent,
+      coordinates: [number, number]
+    ) => {
       popupRef.current?.remove();
+      const returnFocus =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      map.getContainer().scrollIntoView({ block: "nearest" });
+      map.easeTo({
+        center: coordinates,
+        zoom: Math.max(map.getZoom(), 3),
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 0
+          : 300,
+      });
+      const element = document.createElement("div");
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
+        anchor: "center",
         className: "riskwise-popup",
-        maxWidth: "300px",
+        maxWidth: "320px",
       })
-        .setLngLat((feature.geometry as Point).coordinates as [number, number])
-        .setHTML(popupHTML(feature.properties as Record<string, string>))
+        .setLngLat(coordinates)
+        .setDOMContent(element)
         .addTo(map);
-    });
+      const popupRoot = popupRef.current.getElement();
+      popupRef.current.on("close", () => {
+        setPopup(current => (current?.element === element ? null : current));
+        if (
+          returnFocus?.isConnected &&
+          (document.activeElement === document.body ||
+            popupRoot.contains(document.activeElement))
+        )
+          returnFocus.focus();
+      });
+      setPopup({ element, event });
+    },
+    []
+  );
+
+  const handleMapUnavailable = useCallback(() => {
+    popupRef.current?.remove();
+    popupRef.current = null;
+    mapRef.current = null;
+    setPopup(null);
+    setMapInstance(null);
   }, []);
+
+  const handleMapReady = useCallback(
+    (map: maplibregl.Map) => {
+      mapRef.current = map;
+      initLayers(map);
+      setMapInstance(map);
+      map.on("click", LAYER.disruptionPoints, event => {
+        const feature = event.features?.[0];
+        const record = disruptionsRef.current?.find(
+          row => row.id === Number(feature?.properties?.id)
+        );
+        if (!feature || !record) return;
+        setSelectedEventId(record.id);
+        if (evidenceDetailsRef.current) evidenceDetailsRef.current.open = true;
+        showEvidencePopup(
+          map,
+          record,
+          (feature.geometry as Point).coordinates as [number, number]
+        );
+      });
+    },
+    [showEvidencePopup]
+  );
+
+  const inspectEvidence = (event: MapRiskEvent) => {
+    if (selectedEventId === event.id) {
+      setSelectedEventId(null);
+      popupRef.current?.remove();
+      return;
+    }
+    setSelectedEventId(event.id);
+    const point = buildDisruptionGeoJSON([event]).features[0]?.geometry
+      .coordinates as [number, number] | undefined;
+    popupRef.current?.remove();
+    if (mapInstance && point && showDisruptions) {
+      showEvidencePopup(mapInstance, event, point);
+    }
+  };
+
+  useEffect(() => {
+    if (!showDisruptions) popupRef.current?.remove();
+  }, [showDisruptions]);
+  useEffect(() => {
+    setPopup(current => {
+      if (!current || !disruptions) return current;
+      const updated = disruptions.find(event => event.id === current.event.id);
+      return updated && updated !== current.event
+        ? { ...current, event: updated }
+        : current;
+    });
+  }, [disruptions]);
+  useEffect(() => {
+    if (
+      selectedEventId !== null &&
+      disruptions &&
+      !disruptions.some(event => event.id === selectedEventId)
+    ) {
+      setSelectedEventId(null);
+      popupRef.current?.remove();
+    }
+  }, [disruptions, selectedEventId]);
 
   useEffect(() => {
     if (!mapInstance) return;
@@ -307,18 +374,11 @@ export default function MapView() {
       >
         <LibreMap
           onMapReady={handleMapReady}
+          onMapUnavailable={handleMapUnavailable}
           initialCenter={[20, 20]}
           initialZoom={2.5}
           className="h-full w-full"
         />
-        {!mapInstance && (
-          <div
-            role="status"
-            className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground"
-          >
-            Loading map…
-          </div>
-        )}
       </section>
       <aside
         aria-label="Map controls and details"
@@ -366,6 +426,36 @@ export default function MapView() {
             </p>
           )}
         </section>
+        {eventsQuery.isError && (
+          <QueryError
+            title="Could not load disruption evidence"
+            onRetry={() => {
+              void eventsQuery.refetch();
+            }}
+            isRetrying={eventsQuery.isFetching}
+            hasCachedData={Boolean(disruptions)}
+          />
+        )}
+        {routesQuery.isError && (
+          <QueryError
+            title="Could not load stored map paths"
+            onRetry={() => {
+              void routesQuery.refetch();
+            }}
+            isRetrying={routesQuery.isFetching}
+            hasCachedData={Boolean(routes)}
+          />
+        )}
+        {historyQuery.isError && (
+          <QueryError
+            title="Could not load recent evaluations"
+            onRetry={() => {
+              void historyQuery.refetch();
+            }}
+            isRetrying={historyQuery.isFetching}
+            hasCachedData={Boolean(history)}
+          />
+        )}
         <section aria-label="Selected assessment" className="space-y-3">
           <h2 className="text-base font-semibold text-foreground">
             Selected assessment
@@ -380,6 +470,19 @@ export default function MapView() {
                   Evaluation #{selection.evaluationId}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                {selection.evaluatedAt ? (
+                  <>
+                    Assessment snapshot:{" "}
+                    <time dateTime={selection.evaluatedAt}>
+                      {new Date(selection.evaluatedAt).toLocaleString()}
+                    </time>
+                  </>
+                ) : (
+                  "Analysis result from this session"
+                )}
+                . Refreshing map data does not rerun this risk assessment.
+              </p>
               <div
                 className="space-y-2"
                 role="group"
@@ -470,7 +573,7 @@ export default function MapView() {
               </span>
             </button>
           ))}
-          {history?.length === 0 && (
+          {!historyQuery.isError && history?.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No saved evaluations yet.
             </p>
@@ -482,6 +585,67 @@ export default function MapView() {
             Open full history
           </Link>
         </section>
+        <details ref={evidenceDetailsRef} className="space-y-3">
+          <summary className="min-h-11 cursor-pointer py-3 font-semibold text-foreground">
+            Disruption evidence ({disruptions?.length ?? 0})
+          </summary>
+          <p className="text-xs text-muted-foreground">
+            {disruptions?.filter(
+              event =>
+                event.sourceKind === "live" &&
+                (event.severity === "High" || event.severity === "Critical")
+            ).length ?? 0}{" "}
+            live critical/high observations. Gray markers represent static or
+            unverified context.
+          </p>
+          {!eventsQuery.isError && disruptions?.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No disruption evidence is available. Missing reports do not
+              establish route safety.
+            </p>
+          )}
+          <ul className="space-y-3">
+            {disruptions?.map(event => (
+              <li key={event.id} className="cyber-card p-3">
+                <button
+                  type="button"
+                  aria-label={`Inspect evidence: ${event.title}`}
+                  aria-expanded={selectedEventId === event.id}
+                  aria-controls={`map-evidence-${event.id}`}
+                  onClick={() => inspectEvidence(event)}
+                  className="min-h-11 w-full text-left text-sm font-semibold text-foreground break-words"
+                >
+                  {event.title}
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {sourceKindLabel(event.sourceKind)} ·{" "}
+                    {event.sourceKind === "baseline" ? "Baseline risk: " : ""}
+                    {event.severity}
+                  </span>
+                </button>
+                <div
+                  id={`map-evidence-${event.id}`}
+                  hidden={selectedEventId !== event.id}
+                >
+                  {selectedEventId === event.id && (
+                    <>
+                      <p className="mt-2 text-sm text-muted-foreground break-words">
+                        {event.description}
+                      </p>
+                      {!disruptionData.features.some(
+                        feature => feature.properties?.id === event.id
+                      ) && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          No matching map location is available for this record.
+                        </p>
+                      )}
+                      <EventEvidence event={event} />
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
         <details className="text-sm">
           <summary className="min-h-11 cursor-pointer py-3 font-semibold text-foreground">
             Risk legend
@@ -492,6 +656,8 @@ export default function MapView() {
             <li>Red: high (61–75) / critical (76–100)</li>
             <li>Thicker line: selected connection</li>
             <li>Blue lines: stored paths</li>
+            <li>Colored markers: live observation severity</li>
+            <li>Gray markers: static or unverified context</li>
           </ul>
         </details>
         <div
@@ -516,6 +682,19 @@ export default function MapView() {
           )}
         </div>
       </aside>
+      {popup &&
+        createPortal(
+          <article className="cyber-card max-h-[50dvh] overflow-y-auto p-4 pr-11">
+            <h2 className="text-sm font-semibold text-foreground break-words">
+              {popup.event.title}
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground break-words">
+              {popup.event.description}
+            </p>
+            <EventEvidence event={popup.event} />
+          </article>,
+          popup.element
+        )}
     </div>
   );
 }

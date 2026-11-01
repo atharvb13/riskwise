@@ -6,6 +6,7 @@ import type {
   MultiLineString,
 } from "geojson";
 import { getPortCoordinates, type Coordinate } from "@shared/ports";
+import { observedTimestamp, safeSourceUrl } from "@shared/intelligence";
 import type { RouteSelection } from "./routeSelection";
 import { getRiskLevel } from "./riskUtils";
 import { approximatePortConnection, routeGeometry } from "@shared/geography";
@@ -35,13 +36,18 @@ const REGION_COORDS = new Map<string, Coordinate>(
   ])
 );
 
-type RiskEvent = {
+export type MapRiskEvent = {
   id: number;
   title: string;
   description: string;
   category: string;
   severity: string;
   affectedLocations: unknown;
+  sourceKind?: string | null;
+  sourceProvider?: string | null;
+  sourceUrl?: string | null;
+  observedAt?: Date | string | null;
+  lastSeenAt?: Date | string | null;
 };
 
 type RouteRecord = {
@@ -152,7 +158,7 @@ export function buildEvalRouteGeoJSON(
 }
 
 export function buildDisruptionGeoJSON(
-  events: RiskEvent[]
+  events: MapRiskEvent[]
 ): FeatureCollection<Point> {
   const features: Feature<Point>[] = [];
   events.forEach(ev => {
@@ -175,9 +181,23 @@ export function buildDisruptionGeoJSON(
           description: ev.description,
           category: ev.category,
           severity: ev.severity,
-          color: getMapSeverityColor(ev.severity),
+          sourceKind: ev.sourceKind ?? "legacy",
+          sourceProvider: ev.sourceProvider ?? "",
+          sourceUrl: safeSourceUrl(ev.sourceUrl),
+          observedAt: observedTimestamp(ev.observedAt),
+          lastSeenAt: observedTimestamp(ev.lastSeenAt),
+          color:
+            ev.sourceKind === "live"
+              ? getMapSeverityColor(ev.severity)
+              : "#78909c",
           radius:
-            ev.severity === "Critical" ? 14 : ev.severity === "High" ? 10 : 7,
+            ev.sourceKind !== "live"
+              ? 6
+              : ev.severity === "Critical"
+                ? 14
+                : ev.severity === "High"
+                  ? 10
+                  : 7,
         },
       });
     });

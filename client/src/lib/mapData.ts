@@ -6,6 +6,7 @@ import type {
   MultiLineString,
 } from "geojson";
 import { getPortCoordinates, type Coordinate } from "@shared/ports";
+import type { RouteSelection } from "./routeSelection";
 import { getRiskLevel } from "./riskUtils";
 import { approximatePortConnection, routeGeometry } from "@shared/geography";
 
@@ -49,6 +50,7 @@ type RouteRecord = {
 };
 
 type EvalRecord = {
+  id?: number;
   originPort: string;
   destinationPort: string;
   overallRiskScore: number;
@@ -67,6 +69,48 @@ export function getMapSeverityColor(severity: string): string {
     default:
       return "#78909c";
   }
+}
+
+export function getMapRiskColor(score: number | null): string {
+  if (score === null) return "#78909c";
+  return {
+    low: "#32d46a",
+    medium: "#efba3f",
+    high: "#ef5552",
+    critical: "#ef5552",
+  }[getRiskLevel(score)];
+}
+
+export function buildSelectedRouteGeoJSON(
+  selection: RouteSelection | null,
+  selectedOptionId: string
+): FeatureCollection<LineString | MultiLineString> {
+  return {
+    type: "FeatureCollection",
+    features:
+      selection?.options
+        .slice()
+        .sort(
+          (a, b) =>
+            Number(a.id === selectedOptionId) -
+            Number(b.id === selectedOptionId)
+        )
+        .flatMap(option =>
+          option.geometry
+            ? [
+                {
+                  type: "Feature" as const,
+                  geometry: option.geometry,
+                  properties: {
+                    optionId: option.id,
+                    color: getMapRiskColor(option.riskScore),
+                    selected: option.id === selectedOptionId,
+                  },
+                },
+              ]
+            : []
+        ) ?? [],
+  };
 }
 
 export function buildBaseRouteGeoJSON(
@@ -93,14 +137,15 @@ export function buildEvalRouteGeoJSON(
         approximatePortConnection(ev.originPort, ev.destinationPort)
       );
       // MapLibre's style color parser uses these RGB values; UI CSS can use OKLCH.
-      const color = {
-        low: "#32d46a",
-        medium: "#efba3f",
-        high: "#ef5552",
-        critical: "#ef5552",
-      }[getRiskLevel(ev.overallRiskScore)];
+      const color = getMapRiskColor(ev.overallRiskScore);
       return geometry
-        ? [{ type: "Feature" as const, geometry, properties: { color } }]
+        ? [
+            {
+              type: "Feature" as const,
+              geometry,
+              properties: { color, evaluationId: ev.id ?? null },
+            },
+          ]
         : [];
     }),
   };

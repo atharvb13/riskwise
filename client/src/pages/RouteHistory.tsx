@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useRouteMap } from "@/contexts/RouteMapContext";
+import { makeRouteSelection, type EvaluationMapInput } from "@/lib/routeSelection";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState, LoadingState } from "@/components/PageState";
@@ -125,6 +127,12 @@ function RouteTrendSparkline({ originPort, destinationPort }: { originPort: stri
 }
 
 export default function RouteHistory() {
+  const [, navigate] = useLocation();
+  const { showRoute } = useRouteMap();
+  const viewOnMap = (evaluation: EvaluationMapInput, optionId = "base") => {
+    showRoute(makeRouteSelection(evaluation), optionId);
+    navigate("/map");
+  };
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const { data: history, isLoading, isError, isFetching, refetch } = trpc.routes.history.useQuery({ limit: 20 });
@@ -256,6 +264,7 @@ export default function RouteHistory() {
               )}
               <section id={`evaluation-details-${evaluation.id}`} aria-label={`Evaluation #${evaluation.id} details`} hidden={!isExpanded}>
                 {isExpanded && <div className="px-4 pb-5 space-y-4 border-t border-border/50 pt-4 sm:px-5">
+                  <button type="button" onClick={() => viewOnMap(evaluation)} className="min-h-11 rounded-sm border border-primary/40 px-3 text-sm text-primary hover:bg-primary/10">Show assessed route on map</button>
                   {/* Primary risk factor */}
                   <div className="flex items-start gap-2">
                     <AlertTriangle className={cn("w-4 h-4 mt-0.5 shrink-0", getRiskTextClass(evaluation.overallRiskScore))} />
@@ -311,6 +320,7 @@ export default function RouteHistory() {
                             <span className="text-foreground/80 flex-1">{alt.name}</span>
                             <span className={cn("font-bold", getRiskTextClass(alt.riskScore))}>{alt.riskScore}/100</span>
                             <span className="text-muted-foreground">{alt.transitDays}d</span>
+                            <button type="button" onClick={() => viewOnMap(evaluation, `alternative-${i}`)} className="min-h-11 rounded-sm border border-primary/40 px-3 text-sm text-primary hover:bg-primary/10">Show {alt.name} on map</button>
                           </div>
                         ))}
                       </div>

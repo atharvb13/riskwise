@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useRouteMap } from "@/contexts/RouteMapContext";
+import { makeRouteSelection } from "@/lib/routeSelection";
 import { EmptyState, LoadingState } from "@/components/PageState";
 import { SourceSummary, type EvidenceSource } from "@/components/Evidence";
 import { trpc } from "@/lib/trpc";
@@ -76,6 +78,12 @@ export default function RouteAnalyzer() {
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
   const errorHeadingRef = useRef<HTMLHeadingElement>(null);
   const [, navigate] = useLocation();
+  const { showRoute } = useRouteMap();
+  const viewOnMap = (optionId = "base") => {
+    if (!result) return;
+    showRoute(makeRouteSelection({ ...result, originPort: evalledOrigin, destinationPort: evalledDestination }), optionId);
+    navigate("/map");
+  };
 
   const [evalledOrigin, setEvalledOrigin] = useState("");
   const [evalledDestination, setEvalledDestination] = useState("");
@@ -329,6 +337,7 @@ export default function RouteAnalyzer() {
               <h2 ref={resultsHeadingRef} tabIndex={-1} className="text-lg font-semibold text-foreground">Analysis results</h2>
               <p className="text-sm text-muted-foreground break-words">{evalledOrigin} → {evalledDestination}</p>
               <p className="text-xs text-muted-foreground">Model estimates; review source evidence before making shipping decisions.</p>
+              <button type="button" onClick={() => viewOnMap()} className="min-h-11 rounded-sm border border-primary/40 px-3 text-sm text-primary hover:bg-primary/10">Show assessed route on map</button>
             </header>
             {/* Risk Score Card */}
             <div className={cn("cyber-card p-5 border", getRiskBorderClass(result.overallRiskScore), getRiskBgClass(result.overallRiskScore))}>
@@ -485,6 +494,7 @@ export default function RouteAnalyzer() {
                         <div><dt className="text-xs text-muted-foreground">Estimated transit</dt><dd className="mt-1 text-foreground">{alt.transitDays} days</dd></div>
                         <div><dt className="text-xs text-muted-foreground">Cost impact</dt><dd className="mt-1 text-foreground">{alt.costImpact}</dd></div>
                       </dl>
+                      <button type="button" onClick={() => viewOnMap(`alternative-${i}`)} className="mt-3 min-h-11 rounded-sm border border-primary/40 px-3 text-sm text-primary hover:bg-primary/10">Show {alt.name} on map</button>
                     </article>
                   ))}
                 </div>

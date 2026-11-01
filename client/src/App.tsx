@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { RouteMapProvider } from "./contexts/RouteMapContext";
 import RiskWiseLayout from "./components/RiskWiseLayout";
 import MapView from "./pages/MapView";
 import RouteAnalyzer from "./pages/RouteAnalyzer";
@@ -42,7 +43,7 @@ function App() {
                 },
               }}
             />
-            <Router />
+            <RouteMapProvider><Router /></RouteMapProvider>
           </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -1,30 +1,34 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { FeatureCollection, Point } from "geojson";
 import maplibregl from "maplibre-gl";
+import { Link } from "wouter";
 import { MapView as LibreMap } from "@/components/Map";
+import { useRouteMap } from "@/contexts/RouteMapContext";
+import { makeRouteSelection, routeBounds } from "@/lib/routeSelection";
 import { trpc } from "@/lib/trpc";
 import { getCategoryIcon } from "@/lib/riskUtils";
-import { AlertTriangle, Layers, Eye, EyeOff, RefreshCw, Loader2 } from "lucide-react";
-import { buildBaseRouteGeoJSON, buildEvalRouteGeoJSON, buildDisruptionGeoJSON, getMapSeverityColor } from "@/lib/mapData";
+import {
+  buildBaseRouteGeoJSON,
+  buildEvalRouteGeoJSON,
+  buildSelectedRouteGeoJSON,
+  buildDisruptionGeoJSON,
+  getMapSeverityColor,
+} from "@/lib/mapData";
 import { escapeEvidenceHtml } from "@shared/intelligence";
-import { cn } from "@/lib/utils";
-
-// ── Source/layer IDs ─────────────────────────────────────────────────────────
 
 const SRC = {
   baseRoutes: "base-routes",
   evalRoutes: "eval-routes",
+  selectedRoutes: "selected-routes",
   disruptions: "disruptions",
 } as const;
-
 const LAYER = {
   baseLines: "base-routes-line",
   evalLines: "eval-routes-line",
+  selectedLines: "selected-routes-line",
   disruptionZones: "disruption-zones",
   disruptionPoints: "disruption-points",
 } as const;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function popupHTML(props: Record<string, string>) {
   const color = getMapSeverityColor(props.severity);
@@ -69,13 +73,19 @@ function initLayers(map: maplibregl.Map) {
 
   map.addSource(SRC.baseRoutes, { type: "geojson", data: emptyFC });
   map.addSource(SRC.evalRoutes, { type: "geojson", data: emptyFC });
+  map.addSource(SRC.selectedRoutes, { type: "geojson", data: emptyFC });
   map.addSource(SRC.disruptions, { type: "geojson", data: emptyFC });
 
   map.addLayer({
     id: LAYER.baseLines,
     type: "line",
     source: SRC.baseRoutes,
-    paint: { "line-color": "#426d96", "line-opacity": 0.7, "line-width": 1.5, "line-dasharray": [3, 2] },
+    paint: {
+      "line-color": "#426d96",
+      "line-opacity": 0.7,
+      "line-width": 1.5,
+      "line-dasharray": [3, 2],
+    },
   });
 
   map.addLayer({
@@ -91,6 +101,18 @@ function initLayers(map: maplibregl.Map) {
   });
 
   map.addLayer({
+    id: LAYER.selectedLines,
+    type: "line",
+    source: SRC.selectedRoutes,
+    paint: {
+      "line-color": ["get", "color"],
+      "line-opacity": ["case", ["get", "selected"], 1, 0.3],
+      "line-width": ["case", ["get", "selected"], 5, 2],
+      "line-dasharray": [3, 2],
+    },
+  });
+
+  map.addLayer({
     id: LAYER.disruptionZones,
     type: "circle",
     source: SRC.disruptions,
@@ -101,9 +123,13 @@ function initLayers(map: maplibregl.Map) {
       "circle-stroke-opacity": 0.5,
       "circle-stroke-width": 1.5,
       "circle-radius": [
-        "interpolate", ["linear"], ["zoom"],
-        2, ["*", ["get", "radius"], 3],
-        6, ["*", ["get", "radius"], 8],
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        2,
+        ["*", ["get", "radius"], 3],
+        6,
+        ["*", ["get", "radius"], 8],
       ],
     },
   });
@@ -133,198 +159,363 @@ function setSourceData(
   }
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
 export default function MapView() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  const layersInitRef = useRef(false);
-
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showDisruptions, setShowDisruptions] = useState(true);
-  const [mapReady, setMapReady] = useState(false);
-
-  const { data: disruptions, isLoading: disruptionsLoading, refetch } =
-    trpc.events.active.useQuery(undefined, { refetchInterval: 60000 });
-  const { data: routes, isLoading: routesLoading } =
-    trpc.routes.allRoutes.useQuery();
-  const { data: history } = trpc.routes.history.useQuery({ limit: 5 });
-
-  const isLoading = disruptionsLoading || routesLoading;
-  const baseRouteData = useMemo(() => buildBaseRouteGeoJSON(routes ?? []), [routes]);
-  const evaluationData = useMemo(() => buildEvalRouteGeoJSON(history ?? []), [history]);
-  const disruptionData = useMemo(() => buildDisruptionGeoJSON(disruptions ?? []), [disruptions]);
-  const omittedConnections = (routes?.length ?? 0) - baseRouteData.features.length
-    + (history?.length ?? 0) - evaluationData.features.length;
-
-  // Push updated GeoJSON into sources whenever data or visibility changes
-  const syncLayers = useCallback(() => {
-    const map = mapRef.current;
-    if (!map || !layersInitRef.current) return;
-
-    const empty: FeatureCollection = { type: "FeatureCollection", features: [] };
-    setSourceData(map, SRC.baseRoutes, showRoutes ? baseRouteData : empty);
-    setSourceData(map, SRC.evalRoutes, showRoutes ? evaluationData : empty);
-    setSourceData(map, SRC.disruptions, showDisruptions ? disruptionData : empty);
-  }, [baseRouteData, evaluationData, disruptionData, showRoutes, showDisruptions]);
-
-  useEffect(() => { syncLayers(); }, [syncLayers]);
+  const {
+    selection,
+    selectedOptionId,
+    showRoute,
+    selectOption,
+    clearSelection,
+  } = useRouteMap();
+  const eventsQuery = trpc.events.active.useQuery(undefined, {
+    refetchInterval: 60000,
+  });
+  const routesQuery = trpc.routes.allRoutes.useQuery();
+  const historyQuery = trpc.routes.history.useQuery({ limit: 5 });
+  const { data: disruptions } = eventsQuery;
+  const { data: routes } = routesQuery;
+  const { data: history } = historyQuery;
+  const baseData = useMemo(() => buildBaseRouteGeoJSON(routes ?? []), [routes]);
+  const historyData = useMemo(
+    () => buildEvalRouteGeoJSON(history ?? []),
+    [history]
+  );
+  const selectedData = useMemo(
+    () => buildSelectedRouteGeoJSON(selection, selectedOptionId),
+    [selection, selectedOptionId]
+  );
+  const disruptionData = useMemo(
+    () => buildDisruptionGeoJSON(disruptions ?? []),
+    [disruptions]
+  );
+  const selectedOption = selection?.options.find(
+    option => option.id === selectedOptionId
+  );
+  const omittedConnections =
+    (routes?.length ?? 0) -
+    baseData.features.length +
+    (history?.length ?? 0) -
+    historyData.features.length;
+  const isLoading =
+    eventsQuery.isLoading || routesQuery.isLoading || historyQuery.isLoading;
+  const isRefreshing =
+    eventsQuery.isFetching || routesQuery.isFetching || historyQuery.isFetching;
 
   const handleMapReady = useCallback((map: maplibregl.Map) => {
     mapRef.current = map;
     initLayers(map);
-    layersInitRef.current = true;
-    setMapReady(true);
-
-    // Popup on disruption point click
-    map.on("click", LAYER.disruptionPoints, (e) => {
-      const feature = e.features?.[0];
+    setMapInstance(map);
+    map.on("click", LAYER.disruptionPoints, event => {
+      const feature = event.features?.[0];
       if (!feature) return;
-      const props = feature.properties as Record<string, string>;
-      const coords = (feature.geometry as Point).coordinates as [number, number];
-
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         className: "riskwise-popup",
         maxWidth: "300px",
       })
-        .setLngLat(coords)
-        .setHTML(popupHTML(props))
+        .setLngLat((feature.geometry as Point).coordinates as [number, number])
+        .setHTML(popupHTML(feature.properties as Record<string, string>))
         .addTo(map);
-    });
-
-    map.on("mouseenter", LAYER.disruptionPoints, () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", LAYER.disruptionPoints, () => {
-      map.getCanvas().style.cursor = "";
     });
   }, []);
 
-  // Sync after map ready (data may arrive before or after)
   useEffect(() => {
-    if (mapReady) syncLayers();
-  }, [mapReady, syncLayers]);
+    if (!mapInstance) return;
+    const empty: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [],
+    };
+    setSourceData(mapInstance, SRC.baseRoutes, showRoutes ? baseData : empty);
+    setSourceData(
+      mapInstance,
+      SRC.evalRoutes,
+      showRoutes ? historyData : empty
+    );
+    setSourceData(
+      mapInstance,
+      SRC.selectedRoutes,
+      showRoutes ? selectedData : empty
+    );
+    setSourceData(
+      mapInstance,
+      SRC.disruptions,
+      showDisruptions ? disruptionData : empty
+    );
+  }, [
+    mapInstance,
+    baseData,
+    historyData,
+    selectedData,
+    disruptionData,
+    showRoutes,
+    showDisruptions,
+  ]);
 
-  const handleToggleRoutes = () => setShowRoutes((v) => !v);
-  const handleToggleDisruptions = () => setShowDisruptions((v) => !v);
-  const handleRefresh = () => refetch();
+  useEffect(() => {
+    if (!mapInstance) return;
+    const chooseHistory = (event: maplibregl.MapLayerMouseEvent) => {
+      if (
+        mapInstance.queryRenderedFeatures(event.point, {
+          layers: [LAYER.selectedLines],
+        }).length
+      )
+        return;
+      const record = history?.find(
+        row => row.id === Number(event.features?.[0]?.properties?.evaluationId)
+      );
+      if (record) showRoute(makeRouteSelection(record));
+    };
+    const chooseOption = (event: maplibregl.MapLayerMouseEvent) => {
+      const id = event.features?.[0]?.properties?.optionId;
+      if (typeof id === "string") selectOption(id);
+    };
+    mapInstance.on("click", LAYER.evalLines, chooseHistory);
+    mapInstance.on("click", LAYER.selectedLines, chooseOption);
+    return () => {
+      mapInstance.off("click", LAYER.evalLines, chooseHistory);
+      mapInstance.off("click", LAYER.selectedLines, chooseOption);
+    };
+  }, [mapInstance, history, showRoute, selectOption]);
+
+  const fitSelected = useCallback(() => {
+    const bounds = selectedOption && routeBounds(selectedOption.waypoints);
+    if (mapInstance && bounds)
+      mapInstance.fitBounds(bounds, {
+        padding: 40,
+        maxZoom: 6,
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 0
+          : 700,
+      });
+  }, [mapInstance, selectedOption]);
+  useEffect(() => {
+    fitSelected();
+  }, [fitSelected]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="flex min-h-full flex-col lg:h-full lg:flex-row lg:overflow-hidden">
       <h1 className="sr-only">Maritime risk map</h1>
-      <LibreMap
-        onMapReady={handleMapReady}
-        initialCenter={[20, 20]}
-        initialZoom={2.5}
-        className="w-full h-full"
-      />
-
-      {/* Loading overlay */}
-      {!mapReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[oklch(0.08_0.02_240)] z-20">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <span className="text-xs font-mono text-primary/70 tracking-widest">
-              LOADING MAP...
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Data loading indicator */}
-      {isLoading && mapReady && (
-        <div className="absolute top-4 left-16 cyber-card px-3 py-2 z-10 flex items-center gap-2">
-          <Loader2 className="w-3 h-3 text-primary animate-spin" />
-          <span className="text-xs font-mono text-primary">LOADING MAP DATA...</span>
-        </div>
-      )}
-
-      {/* Controls */}
-      <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-        <div className="cyber-card p-3 space-y-2 min-w-[180px]">
-          <div className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase mb-3 flex items-center gap-1.5">
-            <Layers className="w-3 h-3" />
-            Map Layers
-          </div>
-          <button
-            onClick={handleToggleRoutes}
-            aria-pressed={showRoutes}
-            className={cn(
-              "flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm transition-all",
-              showRoutes
-                ? "text-[oklch(0.72_0.22_195)] bg-[oklch(0.72_0.22_195/0.1)] border border-[oklch(0.72_0.22_195/0.3)]"
-                : "text-muted-foreground border border-border"
-            )}
+      <section
+        aria-label="Route map"
+        className="relative h-[55dvh] min-h-[320px] shrink-0 lg:h-full lg:min-h-0 lg:flex-1"
+      >
+        <LibreMap
+          onMapReady={handleMapReady}
+          initialCenter={[20, 20]}
+          initialZoom={2.5}
+          className="h-full w-full"
+        />
+        {!mapInstance && (
+          <div
+            role="status"
+            className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground"
           >
-            {showRoutes ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Route connections
-          </button>
-          <button
-            onClick={handleToggleDisruptions}
-            aria-pressed={showDisruptions}
-            className={cn(
-              "flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm transition-all",
-              showDisruptions
-                ? "text-[oklch(0.65_0.25_25)] bg-[oklch(0.65_0.25_25/0.1)] border border-[oklch(0.65_0.25_25/0.3)]"
-                : "text-muted-foreground border border-border"
-            )}
-          >
-            {showDisruptions ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            Disruptions
-          </button>
-          <button
-            onClick={handleRefresh}
-            className="flex items-center gap-2 text-xs font-mono w-full min-h-11 px-2 py-1.5 rounded-sm text-muted-foreground border border-border hover:text-foreground transition-all"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Refresh
-          </button>
-        </div>
-
-        <div className="cyber-card p-3 min-w-[180px]">
-          <div className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase mb-3">
-            Risk Legend
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { label: "Low (0–30)", color: "oklch(0.75 0.20 145)" },
-              { label: "Moderate (31–60)", color: "oklch(0.80 0.20 75)" },
-              { label: "High / Critical (61+)", color: "oklch(0.65 0.25 25)" },
-            ].map(({ label, color }) => (
-              <div key={label} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ background: color, boxShadow: `0 0 6px ${color}` }}
-                />
-                <span className="text-[11px] font-mono text-muted-foreground">
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-sm flex flex-col gap-2 z-10">
-        <div className="cyber-card px-3 py-2 text-[11px] leading-relaxed" role="note" aria-label="Map connection accuracy">
-          <p className="font-mono font-bold text-foreground">Approximate connections</p>
-          <p className="text-muted-foreground">Dashed lines may cross land. Use maritime routing data to plan shipping lanes, canals, and safe passage.</p>
-          <p className="text-muted-foreground">Disruption markers show approximate matched areas.</p>
-          {omittedConnections > 0 && (
-            <p className="text-muted-foreground mt-1" role="status">{omittedConnections} {omittedConnections === 1 ? "connection omitted" : "connections omitted"}: coordinates unavailable or invalid.</p>
-          )}
-        </div>
-        {disruptions && disruptions.length > 0 && (
-          <div className="cyber-card px-3 py-2 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-[oklch(0.65_0.25_25)] shrink-0" />
-            <span className="text-xs font-mono text-muted-foreground">
-              {disruptions.filter(d => d.sourceKind === "live" && (d.severity === "Critical" || d.severity === "High")).length} live critical/high observations
-            </span>
+            Loading map…
           </div>
         )}
-      </div>
+      </section>
+      <aside
+        aria-label="Map controls and details"
+        className="space-y-5 border-t border-border p-4 lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:border-l lg:border-t-0"
+      >
+        <section aria-label="Map layers" className="space-y-2">
+          <h2 className="text-base font-semibold text-foreground">
+            Map layers
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-pressed={showRoutes}
+              onClick={() => setShowRoutes(value => !value)}
+              className="min-h-11 rounded-sm border border-border px-3 text-sm text-primary"
+            >
+              Route connections
+            </button>
+            <button
+              type="button"
+              aria-pressed={showDisruptions}
+              onClick={() => setShowDisruptions(value => !value)}
+              className="min-h-11 rounded-sm border border-border px-3 text-sm text-primary"
+            >
+              Disruptions
+            </button>
+            <button
+              type="button"
+              disabled={isRefreshing}
+              onClick={() => {
+                void Promise.allSettled([
+                  eventsQuery.refetch(),
+                  routesQuery.refetch(),
+                  historyQuery.refetch(),
+                ]);
+              }}
+              className="min-h-11 rounded-sm border border-border px-3 text-sm text-primary disabled:opacity-50"
+            >
+              {isRefreshing ? "Refreshing…" : "Refresh map data"}
+            </button>
+          </div>
+          {isLoading && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Loading map data…
+            </p>
+          )}
+        </section>
+        <section aria-label="Selected assessment" className="space-y-3">
+          <h2 className="text-base font-semibold text-foreground">
+            Selected assessment
+          </h2>
+          {selection ? (
+            <>
+              <p className="break-words text-sm text-foreground">
+                {selection.originPort} → {selection.destinationPort}
+              </p>
+              {selection.evaluationId && (
+                <p className="text-xs text-muted-foreground">
+                  Evaluation #{selection.evaluationId}
+                </p>
+              )}
+              <div
+                className="space-y-2"
+                role="group"
+                aria-label="Route options"
+              >
+                {selection.options.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={selectedOptionId === option.id}
+                    disabled={!option.geometry}
+                    onClick={() => {
+                      selectOption(option.id);
+                      setShowRoutes(true);
+                    }}
+                    className={`w-full rounded-sm border p-3 text-left text-sm disabled:opacity-60 ${selectedOptionId === option.id ? "border-primary bg-primary/10" : "border-border"}`}
+                  >
+                    <span className="block font-semibold text-foreground">
+                      {option.name}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {option.riskScore === null
+                        ? "Risk unavailable"
+                        : `Risk estimate ${option.riskScore}/100`}{" "}
+                      ·{" "}
+                      {option.transitDays === null
+                        ? "Transit unavailable"
+                        : `${option.transitDays} days estimated`}
+                    </span>
+                    {!option.geometry && (
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Coordinates unavailable or invalid
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {!selectedOption?.geometry && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Coordinates unavailable for the selected connection. Choose an
+                  available alternative.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!mapInstance || !selectedOption?.geometry}
+                  onClick={fitSelected}
+                  className="min-h-11 rounded-sm border border-border px-3 text-sm text-primary disabled:opacity-50"
+                >
+                  Fit selected route
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="min-h-11 rounded-sm border border-border px-3 text-sm text-muted-foreground"
+                >
+                  Clear selection
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Choose a recent evaluation below, or open a route from analysis or
+              history.
+            </p>
+          )}
+        </section>
+        <section aria-label="Recent evaluations" className="space-y-2">
+          <h2 className="text-base font-semibold text-foreground">
+            Recent evaluations
+          </h2>
+          {history?.map(record => (
+            <button
+              key={record.id}
+              type="button"
+              aria-label={`View evaluation #${record.id}: ${record.originPort} to ${record.destinationPort}`}
+              aria-pressed={selection?.evaluationId === record.id}
+              onClick={() => {
+                showRoute(makeRouteSelection(record));
+                setShowRoutes(true);
+              }}
+              className="min-h-11 w-full rounded-sm border border-border p-3 text-left text-sm text-foreground"
+            >
+              {record.originPort} → {record.destinationPort}
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Risk estimate {record.overallRiskScore}/100
+              </span>
+            </button>
+          ))}
+          {history?.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No saved evaluations yet.
+            </p>
+          )}
+          <Link
+            href="/history"
+            className="inline-flex min-h-11 items-center text-sm text-primary underline"
+          >
+            Open full history
+          </Link>
+        </section>
+        <details className="text-sm">
+          <summary className="min-h-11 cursor-pointer py-3 font-semibold text-foreground">
+            Risk legend
+          </summary>
+          <ul className="space-y-2 text-muted-foreground">
+            <li>Green: low (0–30)</li>
+            <li>Amber: moderate (31–60)</li>
+            <li>Red: high (61–75) / critical (76–100)</li>
+            <li>Thicker line: selected connection</li>
+            <li>Blue lines: stored paths</li>
+          </ul>
+        </details>
+        <div
+          role="note"
+          aria-label="Map connection accuracy"
+          className="cyber-card space-y-2 p-3 text-xs leading-relaxed text-muted-foreground"
+        >
+          <p className="font-semibold text-foreground">
+            Approximate connections
+          </p>
+          <p>
+            Dashed lines may cross land. Use maritime routing data to plan
+            shipping lanes, canals, and safe passage. Alternative waypoints are
+            model suggestions.
+          </p>
+          <p>Disruption markers show approximate matched areas.</p>
+          {omittedConnections > 0 && (
+            <p role="status">
+              {omittedConnections} connections omitted: coordinates unavailable
+              or invalid.
+            </p>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
